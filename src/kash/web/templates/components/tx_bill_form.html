@@ -1,0 +1,60 @@
+{# "Make this a bill" in the transaction pop-up (GET /transactions/<id>/bill-draft).
+   Pre-filled from the transaction; everything can be changed before adding. #}
+{% set tx = draft.transaction %}
+{% if draft.problem %}
+<p class="text-xs text-slate-500">{{ draft.problem }}</p>
+{% elif draft.existing %}
+{% set b = draft.existing %}
+<div class="flex items-center justify-between gap-3 text-xs">
+  <p class="text-slate-600">
+    {% if draft.already_paid %}This payment is already recorded for your bill <span class="font-semibold text-slate-900">{{ b.name }}</span>.
+    {% else %}<span class="font-semibold text-slate-900">{{ b.name }}</span> is already a bill ({{ b.expected_amount | money }}, {{ frequency_labels[b.frequency] | lower }}), so it isn't added twice. Its payments are matched automatically.{% endif %}
+  </p>
+  <a href="/bills" class="flex-shrink-0 px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 font-semibold text-slate-700 rounded-lg transition-colors">Open bills ›</a>
+</div>
+{% else %}
+<form method="post" action="/transactions/{{ tx.id }}/make-bill" class="space-y-3" data-dues="{{ next_dues | tojson | forceescape }}">
+  <input type="hidden" name="next" value="{{ next }}">
+  <div class="grid grid-cols-2 gap-3">
+    <label class="block col-span-2">
+      <span class="block text-[0.6875rem] font-semibold text-slate-600 mb-1">Bill name</span>
+      <input name="name" value="{{ draft.name }}" required maxlength="80" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+    </label>
+    <label class="block">
+      <span class="block text-[0.6875rem] font-semibold text-slate-600 mb-1">Amount</span>
+      <input name="expected_amount" value="{{ '%.2f' | format(draft.amount) }}" inputmode="decimal" required class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+    </label>
+    <label class="block">
+      <span class="block text-[0.6875rem] font-semibold text-slate-600 mb-1">How often</span>
+      <select name="frequency" onchange="this.form.next_due_date.value = JSON.parse(this.form.dataset.dues)[this.value]" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+        {% for value, label in frequency_labels.items() %}<option value="{{ value.value }}" {% if value.value == "monthly" %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="block">
+      <span class="block text-[0.6875rem] font-semibold text-slate-600 mb-1">Next due</span>
+      <input type="date" name="next_due_date" value="{{ next_dues['monthly'] }}" min="{{ (tx.date).isoformat() }}" required class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+    </label>
+    <label class="block">
+      <span class="block text-[0.6875rem] font-semibold text-slate-600 mb-1">Category</span>
+      <select name="category_id" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+        <option value="">None</option>
+        {% for c in categories %}<option value="{{ c.id }}" {% if c.id == draft.category_id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="block col-span-2">
+      <span class="block text-[0.6875rem] font-semibold text-slate-600 mb-1">Match payments from</span>
+      <input name="merchant" value="{{ draft.merchant }}" maxlength="80" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 uppercase focus:outline-none focus:ring-1 focus:ring-emerald-500">
+      <span class="block text-[0.6875rem] text-slate-400 mt-1">Later charges whose merchant starts with this are recorded as payments.</span>
+    </label>
+  </div>
+  <label class="flex items-start gap-2 cursor-pointer">
+    <input type="checkbox" name="is_variable" value="1" class="checkbox checkbox-xs rounded mt-0.5">
+    <span class="text-xs text-slate-700"><span class="font-semibold">Amount changes each time</span>
+      <span class="block text-[0.6875rem] text-slate-400">E.g. electricity: any amount counts as the payment.</span></span>
+  </label>
+  <div class="flex items-center justify-between gap-3">
+    <p class="text-[0.6875rem] text-slate-400">This payment ({{ tx.date | day }}, {{ tx.amount | abs | money }}) is recorded as the first one.</p>
+    <button type="submit" class="flex-shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors">Add bill</button>
+  </div>
+</form>
+{% endif %}

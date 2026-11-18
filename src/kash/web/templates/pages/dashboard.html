@@ -1,0 +1,646 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Kash{% endblock %}
+
+{% block content %}
+{% from "components/merchant_icon.html" import merchant_box %}
+{% macro delta(pct, good_when_up=true) -%}
+  {%- if pct is none -%}
+    <span class="text-slate-400 font-medium">No comparison yet</span>
+  {%- else -%}
+    {%- set up = pct >= 0 -%}
+    <span class="{% if up == good_when_up %}text-emerald-600{% else %}text-rose-500{% endif %}">{{ "↑" if up else "↓" }} {{ "{:.0f}".format(pct | abs) }}% {{ compare_label }}</span>
+  {%- endif -%}
+{%- endmacro %}
+{% set budget_pct = [summary.budget_pct_used | float, 100.0] | min %}
+{% macro month_nav() -%}
+<div class="flex items-center gap-1">
+  <a href="/?period={{ month.prev_period }}" class="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" title="Previous month">
+    {{ icon("chevron-left", "w-4 h-4") }}
+  </a>
+  <select aria-label="Month" onchange="kashGo('/?period=' + this.value)"
+    class="py-1.5 pl-3 pr-8 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 shadow-xs focus:outline-none focus:ring-1 focus:ring-emerald-500">
+    {% for value, label in available_periods %}
+    <option value="{{ value }}" {% if value == month.period %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <a href="/?period={{ month.next_period }}" class="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" title="Next month">
+    {{ icon("chevron-right", "w-4 h-4") }}
+  </a>
+</div>
+{%- endmacro %}
+{% macro deposits_nudge() -%}
+{% if uncategorized_deposits %}
+<div onclick="event.preventDefault(); event.stopPropagation(); kashGo('/transactions?type=other_income&{{ range_query }}')"
+  class="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-amber-600 hover:text-amber-700 hover:underline mt-1"
+  title="Money in without a category counts as income. File paybacks under the category they covered.">
+  {{ uncategorized_deposits }} deposit{{ "s" if uncategorized_deposits != 1 }} need{{ "s" if uncategorized_deposits == 1 }} a category ›
+</div>
+{% endif %}
+{%- endmacro %}
+{% macro needs_category_banner() -%}
+{% if uncategorized_count %}
+<a href="/transactions?category_id=none&{{ range_query }}" class="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 transition-colors">
+  <span class="flex items-center gap-2.5 text-xs font-semibold">
+    <span class="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0"></span>
+    {{ uncategorized_count }} transaction{{ "s" if uncategorized_count != 1 }} {{ period_phrase }} need{{ "s" if uncategorized_count == 1 }} a category{% if ai_guess_count %} · {{ ai_guess_count }} with an AI suggestion{% endif %}
+  </span>
+  <span class="text-xs font-bold whitespace-nowrap">Review ›</span>
+</a>
+{% endif %}
+{%- endmacro %}
+{% macro refund_note(extra="") -%}
+{% if summary.monthly_refunds > 0 %}
+<div class="text-[0.6875rem] text-slate-500 mt-1 {{ extra }}" title="Money back in a spending category (refunds, paybacks) reduces spending">after {{ summary.monthly_refunds | money(0) }} refunds</div>
+{% endif %}
+{%- endmacro %}
+{% macro balance_change_line(on_dark=false) -%}
+{% if balance_change is not none %}
+{% set up = balance_change >= 0 %}
+<div class="text-xs font-semibold {% if up %}{{ 'text-emerald-400' if on_dark else 'text-emerald-600' }}{% else %}{{ 'text-rose-300' if on_dark else 'text-rose-600' }}{% endif %}">
+  {{ "↑" if up else "↓" }} {{ balance_change | abs | money }}{% if balance_change_pct is not none %} ({{ "{:.1f}".format(balance_change_pct | abs) }}%){% endif %}
+  <span class="font-medium text-slate-400">{{ "this month" if range.is_current else "in " ~ range.month.start.strftime("%B") }}</span>
+</div>
+{% endif %}
+{%- endmacro %}
+{% macro balance_trend(classes, on_dark=false) -%}
+{% if balance_chart %}
+{% set down = balance_change is not none and balance_change < 0 %}
+{% set color = ('text-rose-300' if on_dark else 'text-rose-500') if down else ('text-emerald-400' if on_dark else 'text-emerald-500') %}
+<svg viewBox="0 0 100 40" preserveAspectRatio="none" class="{{ classes }} {{ color }}" aria-hidden="true">
+  <path d="{{ balance_chart.area }}" fill="currentColor" fill-opacity="0.12" />
+  <path d="{{ balance_chart.path }}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
+</svg>
+{% endif %}
+{%- endmacro %}
+{% macro tx_click(tx) -%}
+openTxModal('{{ tx.id }}', {{ tx.clean_description | tojson | forceescape }}, {{ tx.original_description | tojson | forceescape }}, '{{ tx.amount }}', '{{ tx.date | fulldate }}', '{{ tx.category_id or '' }}', {{ (account_names.get(tx.account_id, '')) | tojson | forceescape }}, {{ 'true' if tx.is_transfer else 'false' }}, {{ transaction_icon_info(tx) | tojson | forceescape }})
+{%- endmacro %}
+
+{# ---------------------------------------------------------------------------
+   Cards. The dashboard shows them in the order saved per device (Customize);
+   see services/dashboard_layout.py. ``cls`` is the desktop grid width.
+   --------------------------------------------------------------------------- #}
+{% macro donut(uid) -%}
+<div id="{{ uid }}" data-donut class="flex flex-col xl:flex-row items-center gap-5">
+  <!-- Hover a slice or a legend row to highlight it -->
+  <div class="relative w-40 h-40 flex-shrink-0 flex items-center justify-center">
+    <svg class="w-full h-full donut-gauge-ring" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="38" stroke="#f1f5f9" stroke-width="12" fill="none" />
+      {% for cat in dashboard_categories %}
+      <circle
+        class="kash-slice cursor-pointer" data-slice="{{ loop.index0 }}"
+        cx="50" cy="50" r="38"
+        stroke="{{ cat.color }}"
+        stroke-width="12"
+        stroke-dasharray="{{ cat.stroke_len }} {{ donut_circumference }}"
+        stroke-dashoffset="{{ cat.stroke_offset }}"
+        fill="none"
+      ><title>{{ cat.name }}: {{ cat.total | money }} ({{ cat.pct }}%)</title></circle>
+      {% endfor %}
+    </svg>
+    <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none px-6 text-center">
+      <span data-donut-value class="text-lg font-bold text-slate-900 leading-tight">{{ spending_total | money(0) }}</span>
+      <span data-donut-label class="text-[0.625rem] text-slate-400 font-medium uppercase leading-tight line-clamp-2">Total</span>
+    </div>
+  </div>
+  <div class="w-full min-w-0 flex-1 space-y-1 text-xs">
+    {% for cat in dashboard_categories %}
+    {% if cat.other %}{% set href = "/transactions?type=expense&" ~ range_query %}
+    {% elif cat.category_id %}{% set href = "/transactions?category_id=" ~ cat.category_id ~ "&" ~ range_query %}
+    {% else %}{% set href = "/transactions?category_id=" ~ uncategorized_value ~ "&" ~ range_query %}{% endif %}
+    <a href="{{ href }}" data-slice="{{ loop.index0 }}" data-name="{{ cat.name }}" data-amount="{{ cat.total | money(0) }}" data-pct="{{ cat.pct }}"
+       class="kash-legend flex items-center justify-between gap-2 px-2 py-1 -mx-2 rounded-lg hover:bg-slate-50 transition-colors">
+      <span class="flex items-center gap-2 min-w-0">
+        <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background-color: {{ cat.color }};"></span>
+        <span class="text-slate-600 truncate">{{ cat.name }}</span>
+      </span>
+      <span class="flex-shrink-0 whitespace-nowrap flex items-baseline gap-2"><span class="text-slate-400">{{ cat.total | money(0) }}</span><span class="font-bold text-slate-900 w-8 text-right">{{ cat.pct }}%</span></span>
+    </a>
+    {% else %}
+    <p class="text-slate-400">No spending recorded {{ period_phrase }}.</p>
+    {% endfor %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro card_categories(cls="", uid="donut") -%}
+<div class="{{ cls }} kash-card p-5 md:p-6 bg-white border border-slate-100 shadow-sm rounded-2xl">
+  <div class="flex items-center justify-between mb-4 md:mb-6">
+    <h3 class="font-bold text-sm md:text-base text-slate-900">Spending by Category</h3>
+    <a href="/reports" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700">Reports ›</a>
+  </div>
+  {{ donut(uid) }}
+</div>
+{%- endmacro %}
+
+{% macro card_sankey(cls="", chart=none) -%}
+<div class="{{ cls }} kash-card p-5 md:p-6 bg-white border border-slate-100 shadow-sm rounded-2xl">
+  <div class="flex items-start justify-between gap-3 mb-3">
+    <div>
+      <h3 class="font-bold text-sm md:text-base text-slate-900">Money Flow</h3>
+      <div class="text-[0.6875rem] text-slate-400">Where income went {{ period_phrase }}</div>
+    </div>
+    <a href="/reports" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700 whitespace-nowrap">Reports ›</a>
+  </div>
+  {% if chart %}
+  <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" class="w-full h-auto kash-sankey" role="img" aria-label="Cash flow: {{ chart.total | money(0) }} in, split into spending and savings">
+    {% for link in chart.links %}
+    <a href="{{ link.flow.href }}"><path class="kash-band" d="{{ link.d }}" fill="{{ link.color }}"><title>{{ link.flow.name }}: {{ link.flow.amount | money }}</title></path></a>
+    {% endfor %}
+    {% for n in chart.sources + chart.targets %}
+    <rect x="{{ n.x }}" y="{{ '%.1f' | format(n.y) }}" width="8" height="{{ '%.1f' | format(n.h) }}" rx="2" fill="{{ n.color }}" />
+    {% endfor %}
+    {% set m = chart.middle %}
+    <rect x="{{ m.x }}" y="{{ '%.1f' | format(m.y) }}" width="8" height="{{ '%.1f' | format(m.h) }}" rx="2" class="kash-sankey-mid" />
+    {% for n in chart.sources %}
+    <a href="{{ n.flow.href }}"><text x="{{ n.x + 13 }}" y="{{ '%.1f' | format(n.label_y) }}" dominant-baseline="middle" class="kash-sankey-label"><tspan class="kash-sankey-name">{{ n.flow.name | truncate(22, true, "…") }}</tspan> <tspan class="kash-sankey-amount">{{ n.flow.amount | money(0) }}</tspan></text></a>
+    {% endfor %}
+    {% for n in chart.targets %}
+    <a href="{{ n.flow.href }}"><text x="{{ n.x - 5 }}" y="{{ '%.1f' | format(n.label_y) }}" dominant-baseline="middle" text-anchor="end" class="kash-sankey-label"><tspan class="kash-sankey-name">{{ n.flow.name | truncate(22, true, "…") }}</tspan> <tspan class="kash-sankey-amount">{{ n.flow.amount | money(0) }}</tspan></text></a>
+    {% endfor %}
+  </svg>
+  {% else %}
+  <p class="py-6 text-center text-xs text-slate-400">No income or spending recorded {{ period_phrase }}.</p>
+  {% endif %}
+</div>
+{%- endmacro %}
+
+{% macro card_recent_desktop(cls="") -%}
+<div class="{{ cls }} kash-card p-6 bg-white border border-slate-100 shadow-sm rounded-2xl">
+  <div class="flex items-center justify-between mb-4">
+    <h3 class="font-bold text-base text-slate-900">Recent Transactions</h3>
+    <a href="/transactions" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700">View all</a>
+  </div>
+
+  <div class="divide-y divide-slate-100">
+    {% for tx in recent_transactions %}
+    <div role="button" tabindex="0" onclick="{{ tx_click(tx) }}" onkeydown="if (event.key === 'Enter') this.click()" title="View details, set category, or create a rule" class="py-2.5 -mx-2 px-2 rounded-lg flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer">
+      <div class="flex items-center gap-3">
+        {{ merchant_box(transaction_icon(tx), "receipt" if tx.amount < 0 else "bank", box="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", fallback_class="bg-slate-100 text-slate-700" if tx.amount < 0 else "bg-emerald-100 text-emerald-600", icon_class="w-4 h-4") }}
+        <div>
+          <div class="font-bold text-xs text-slate-900">{{ tx.clean_description }}</div>
+          <div class="text-[0.625rem] text-slate-400">{{ tx.merchant_name or tx.date | fulldate }}</div>
+        </div>
+      </div>
+      <div class="text-right">
+        <div class="font-bold text-xs {% if tx.amount < 0 %}text-rose-500{% else %}text-emerald-600{% endif %}">
+          {{ tx.amount | money(sign=True) }}
+        </div>
+        <div class="text-[0.625rem] text-slate-400">{{ tx.date | day }}</div>
+      </div>
+    </div>
+    {% else %}
+    <div class="py-6 text-center text-xs text-slate-400">
+      No recent transactions found.
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro card_bills(cls="") -%}
+<div class="{{ cls }} kash-card p-5 bg-white border border-slate-100 shadow-sm rounded-2xl">
+  <div class="flex items-center justify-between mb-4">
+    <h3 class="font-bold text-sm text-slate-900">Upcoming Bills</h3>
+    <a href="/bills" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700">View all</a>
+  </div>
+
+  <div class="space-y-3">
+    {% for bill, occ in upcoming_bills[:6] %}
+    <div class="flex items-center justify-between text-xs">
+      <div class="flex items-center gap-2.5">
+        {{ merchant_box(bill_icon(bill), "calendar", box="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0", fallback_class="bg-blue-50 text-blue-600", icon_class="w-3.5 h-3.5") }}
+        <div>
+          <div class="font-semibold text-slate-900">{{ bill.name }}</div>
+          <div class="text-[0.625rem] text-slate-400">{{ occ.due_date | day }}</div>
+        </div>
+      </div>
+      <div class="font-bold text-slate-900">{{ occ.expected_amount | money }} ›</div>
+    </div>
+    {% else %}
+    <div class="py-6 text-center text-xs text-slate-400">
+      No bills due in the next {{ upcoming_days }} days.
+    </div>
+    {% endfor %}
+    {% if upcoming_bills | length > 6 %}
+    <a href="/bills" class="block text-[0.6875rem] font-semibold text-emerald-600 hover:text-emerald-700">+ {{ upcoming_bills | length - 6 }} more in the next {{ upcoming_days }} days</a>
+    {% endif %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro card_budget_desktop(cls="") -%}
+<div class="{{ cls }} kash-card p-5 bg-white border border-slate-100 shadow-sm rounded-2xl flex flex-col justify-between">
+  <div>
+    <h3 class="font-bold text-sm text-slate-900 mb-4">Budget Progress</h3>
+    
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-xs border border-emerald-100">
+        {{ "{:.0f}".format(summary.budget_pct_used) }}%
+      </div>
+      <div>
+        {% if summary.budget_total_budgeted > 0 %}
+        <div class="font-bold text-sm text-slate-900">{{ summary.budget_remaining | money }} remaining</div>
+        <div class="text-[0.6875rem] text-slate-400">Spent {{ summary.budget_total_spent | money }} of {{ summary.budget_total_budgeted | money }}</div>
+        {% else %}
+        <div class="font-bold text-sm text-slate-900">No budget set</div>
+        <div class="text-[0.6875rem] text-slate-400">Add category budgets to track progress</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+      <div class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: {{ "{:.1f}".format(budget_pct) }}%;"></div>
+    </div>
+  </div>
+
+  <a href="/budget" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700 block text-right mt-4">
+    Manage budget ›
+  </a>
+</div>
+{%- endmacro %}
+
+{% macro card_cash_flow(cls="") -%}
+<div class="{{ cls }} kash-card p-5 bg-white border border-slate-100 shadow-sm rounded-2xl flex flex-col justify-between">
+  <div>
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-bold text-sm text-slate-900">Cash Flow</h3>
+      <div class="flex items-center gap-3 text-[0.625rem] font-medium">
+        <span class="flex items-center gap-1 text-slate-600"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> Income</span>
+        <span class="flex items-center gap-1 text-slate-600"><span class="w-2 h-2 rounded-full bg-rose-500"></span> Expenses</span>
+      </div>
+    </div>
+
+    <!-- Bar representation -->
+    {% set max_cf = [(summary.monthly_income | float), (summary.monthly_expenses | float), 1.0] | max %}
+    {% set inc_h = ((summary.monthly_income | float) / max_cf * 85) | round | int if max_cf > 0 else 0 %}
+    {% set exp_h = ((summary.monthly_expenses | float) / max_cf * 85) | round | int if max_cf > 0 else 0 %}
+    <div class="h-28 flex items-end justify-around gap-2 pt-2 px-4 border-b border-slate-100">
+      <div class="flex flex-col items-center gap-1.5 w-1/3">
+        <div class="w-full bg-emerald-500 rounded-t-lg transition-all" style="height: {{ [inc_h, 6] | max }}px;"></div>
+        <span class="text-[0.625rem] font-bold text-slate-700">{{ summary.monthly_income | money(0) }}</span>
+      </div>
+      <div class="flex flex-col items-center gap-1.5 w-1/3">
+        <div class="w-full bg-rose-500 rounded-t-lg transition-all" style="height: {{ [exp_h, 6] | max }}px;"></div>
+        <span class="text-[0.625rem] font-bold text-slate-700">{{ summary.monthly_expenses | money(0) }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between text-xs pt-3">
+    {% if summary.monthly_surplus >= 0 %}
+    <span class="text-slate-400 font-medium">Net surplus</span>
+    <span class="font-bold text-emerald-600">{{ summary.monthly_surplus | money(sign=True) }}</span>
+    {% else %}
+    <span class="text-slate-400 font-medium">Net deficit</span>
+    <span class="font-bold text-rose-500">{{ summary.monthly_surplus | abs | money }}</span>
+    {% endif %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro card_stats(cls="") -%}
+<div class="{{ cls }} grid grid-cols-4 gap-4">
+  <!-- Total Banking Balance Card (Excludes Investments) -->
+  <a href="/accounts" class="kash-card p-5 bg-white border border-slate-100 shadow-sm rounded-2xl hover:border-slate-300 hover:shadow-md transition-all cursor-pointer block group">
+    <div class="flex items-center justify-between">
+      <span class="text-xs font-medium text-slate-500 group-hover:text-slate-700 transition-colors">Total Banking Balance{% if not range.is_current %} · {{ balance_as_of | day }}{% endif %}</span>
+      <span class="text-[0.625rem] text-slate-400 group-hover:text-emerald-600 font-semibold transition-colors">Accounts ›</span>
+    </div>
+    <div class="flex items-end justify-between gap-2">
+      <div class="min-w-0">
+        <div class="text-2xl font-extrabold tracking-tight text-slate-900 mt-1.5 mb-1 group-hover:text-emerald-700 transition-colors">
+          {{ banking_balance | money }}
+        </div>
+        {% if balance_change is not none %}{{ balance_change_line() }}{% else %}
+        <div class="text-xs font-medium text-slate-400">Checking, savings &amp; cash</div>
+        {% endif %}
+      </div>
+      {{ balance_trend("w-16 h-9 flex-shrink-0") }}
+    </div>
+  </a>
+
+  <!-- Income Card (Filterable) -->
+  <a href="/transactions?type=income&{{ range_query }}" class="kash-card p-5 bg-white border border-slate-100 shadow-sm rounded-2xl hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer block group">
+    <div class="flex items-center justify-between">
+      <span class="text-xs font-medium text-slate-500 group-hover:text-emerald-700 transition-colors">Income</span>
+      <span class="text-[0.625rem] text-slate-400 group-hover:text-emerald-600 font-semibold transition-colors">Filter ›</span>
+    </div>
+    <div class="text-2xl font-extrabold tracking-tight text-emerald-600 mt-1.5 mb-1">
+      {{ summary.monthly_income | money }}
+    </div>
+    <div class="text-xs font-semibold">
+      {{ delta(summary.monthly_income_delta_pct) }}
+    </div>
+    {{ deposits_nudge() }}
+  </a>
+
+  <!-- Expenses Card (Filterable) -->
+  <a href="/transactions?type=expense&{{ range_query }}" class="kash-card p-5 bg-white border border-slate-100 shadow-sm rounded-2xl hover:border-rose-300 hover:shadow-md transition-all cursor-pointer block group">
+    <div class="flex items-center justify-between">
+      <span class="text-xs font-medium text-slate-500 group-hover:text-rose-700 transition-colors">Expenses</span>
+      <span class="text-[0.625rem] text-slate-400 group-hover:text-rose-600 font-semibold transition-colors">Filter ›</span>
+    </div>
+    <div class="text-2xl font-extrabold tracking-tight text-rose-600 mt-1.5 mb-1">
+      {{ summary.monthly_expenses | money }}
+    </div>
+    <div class="text-xs font-semibold">
+      {{ delta(summary.monthly_expenses_delta_pct, false) }}
+    </div>
+    {{ refund_note() }}
+  </a>
+
+  <!-- Surplus / Deficit Card (Filterable) -->
+  {% set surplus = summary.monthly_surplus >= 0 %}
+  <a href="/transactions?{{ range_query }}" class="kash-card p-5 bg-white border border-slate-100 shadow-sm rounded-2xl {% if surplus %}hover:border-blue-300{% else %}hover:border-rose-300{% endif %} hover:shadow-md transition-all cursor-pointer block group">
+    <div class="flex items-center justify-between">
+      <span class="text-xs font-medium text-slate-500 {% if surplus %}group-hover:text-blue-700{% else %}group-hover:text-rose-700{% endif %} transition-colors">{{ "Surplus" if surplus else "Deficit" }}</span>
+      <span class="text-[0.625rem] text-slate-400 {% if surplus %}group-hover:text-blue-600{% else %}group-hover:text-rose-600{% endif %} font-semibold transition-colors">Filter ›</span>
+    </div>
+    <div class="text-2xl font-extrabold tracking-tight {% if surplus %}text-blue-600{% else %}text-rose-600{% endif %} mt-1.5 mb-1">
+      {% if surplus %}{{ summary.monthly_surplus | money(sign=True) }}{% else %}{{ summary.monthly_surplus | abs | money }}{% endif %}
+    </div>
+    <div class="text-xs font-medium text-slate-400">
+      Cash available: {{ summary.available_funds | money }}
+    </div>
+  </a>
+</div>
+{%- endmacro %}
+
+{% macro mobile_card(id) -%}
+{% if id == "balance" %}
+<a href="/accounts" class="block kash-hero-card relative overflow-hidden rounded-2xl p-5 hover:ring-2 hover:ring-white/20 transition-all cursor-pointer group">
+  <div class="flex items-center gap-1.5 text-xs font-medium text-slate-400 group-hover:text-white transition-colors">
+    <span>Total Banking Balance{% if not range.is_current %} · {{ balance_as_of | day }}{% endif %}</span>
+    <span class="text-[0.625rem] text-slate-500 group-hover:text-slate-300">View Accounts ›</span>
+  </div>
+  <div class="flex items-end justify-between gap-3">
+    <div class="min-w-0">
+      <div class="text-3xl font-extrabold tracking-tight text-white my-1">
+        {{ banking_balance | money }}
+      </div>
+      {{ balance_change_line(on_dark=true) }}
+    </div>
+    {{ balance_trend("w-24 h-12 flex-shrink-0", on_dark=true) }}
+  </div>
+</a>
+{% elif id == "income_expenses" %}
+{% set compare_name = "Last month" if range.is_current else (compare_label | replace("vs ", "", 1)) %}
+<div class="grid grid-cols-2 gap-3 items-start">
+  <!-- Income Card -->
+  <div class="kash-card rounded-2xl bg-white border border-slate-100 shadow-sm">
+    <a href="/transactions?type=income&{{ range_query }}" class="block px-4 pt-4 group">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center">
+          <span class="kash-circle-badge bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100 transition-colors">
+            {{ icon("arrow-up-right", "w-3.5 h-3.5") }}
+          </span>
+          <span class="text-xs font-semibold text-slate-600 ml-1.5 group-hover:text-emerald-700">Income</span>
+        </div>
+        <span class="text-[0.625rem] text-slate-400 group-hover:text-emerald-600">Filter ›</span>
+      </div>
+      <div class="text-xl font-bold tracking-tight text-slate-900 mt-2 group-hover:text-emerald-700 transition-colors">
+        {{ summary.monthly_income | money }}
+      </div>
+    </a>
+    <div class="px-4">{{ deposits_nudge() }}</div>
+    <details id="income-details" class="kash-card-details px-4 pb-2">
+      <summary class="flex justify-center py-1 cursor-pointer text-slate-400 hover:text-slate-600" aria-label="Income details">
+        {{ icon("chevron-down", "w-4 h-4 kash-chevron") }}
+      </summary>
+      <dl class="border-t border-slate-100 pt-2 pb-1 space-y-1.5 text-[0.6875rem]">
+        <div class="font-semibold">{{ delta(summary.monthly_income_delta_pct) }}</div>
+        <div class="flex justify-between gap-2"><dt class="text-slate-500">{{ compare_name }}</dt><dd class="font-semibold text-slate-700 whitespace-nowrap">{{ summary.compare_income | money }}</dd></div>
+        {% for line in income_lines %}
+        <div class="flex justify-between gap-2"><dt class="text-slate-500 truncate"><a href="/transactions?type=income&category_id={{ line.category_id or 'none' }}&{{ range_query }}" class="hover:text-emerald-700 hover:underline">{{ line.name }}</a></dt><dd class="font-semibold text-slate-700 whitespace-nowrap">{{ line.total | money }}</dd></div>
+        {% endfor %}
+      </dl>
+    </details>
+  </div>
+
+  <!-- Expenses Card -->
+  <div class="kash-card rounded-2xl bg-white border border-slate-100 shadow-sm">
+    <a href="/transactions?type=expense&{{ range_query }}" class="block px-4 pt-4 group">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center">
+          <span class="kash-circle-badge bg-rose-50 text-rose-500 group-hover:bg-rose-100 transition-colors">
+            {{ icon("arrow-down-right", "w-3.5 h-3.5") }}
+          </span>
+          <span class="text-xs font-semibold text-slate-600 ml-1.5 group-hover:text-rose-700">Expenses</span>
+        </div>
+        <span class="text-[0.625rem] text-slate-400 group-hover:text-rose-600">Filter ›</span>
+      </div>
+      <div class="text-xl font-bold tracking-tight text-slate-900 mt-2 group-hover:text-rose-700 transition-colors">
+        {{ summary.monthly_expenses | money }}
+      </div>
+    </a>
+    <details id="expense-details" class="kash-card-details px-4 pb-2">
+      <summary class="flex justify-center py-1 cursor-pointer text-slate-400 hover:text-slate-600" aria-label="Expense details">
+        {{ icon("chevron-down", "w-4 h-4 kash-chevron") }}
+      </summary>
+      <dl class="border-t border-slate-100 pt-2 pb-1 space-y-1.5 text-[0.6875rem]">
+        <div class="font-semibold">{{ delta(summary.monthly_expenses_delta_pct, false) }}</div>
+        <div class="flex justify-between gap-2"><dt class="text-slate-500">{{ compare_name }}</dt><dd class="font-semibold text-slate-700 whitespace-nowrap">{{ summary.compare_expenses | money }}</dd></div>
+        {% if summary.monthly_refunds > 0 %}
+        <div class="flex justify-between gap-2" title="Money back in a spending category (refunds, paybacks) reduces spending"><dt class="text-slate-500">Refunds</dt><dd class="font-semibold text-emerald-600 whitespace-nowrap">{{ (0 - summary.monthly_refunds) | money }}</dd></div>
+        <div class="flex justify-between gap-2"><dt class="text-slate-500">Before refunds</dt><dd class="font-semibold text-slate-700 whitespace-nowrap">{{ (summary.monthly_expenses + summary.monthly_refunds) | money }}</dd></div>
+        {% endif %}
+        {% if dashboard_categories %}
+        {% set top = dashboard_categories[0] %}
+        <div>
+          <div class="flex justify-between gap-2"><dt class="text-slate-500">Top category</dt><dd class="font-semibold text-slate-700 whitespace-nowrap">{{ top.total | money }}</dd></div>
+          <div class="text-slate-400 truncate">{{ top.name }}</div>
+        </div>
+        {% endif %}
+      </dl>
+    </details>
+  </div>
+</div>
+{% elif id == "net_flow" %}
+<div class="flex items-center justify-center -mt-1 pb-0.5">
+  <a href="/transactions?{{ range_query }}" class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-semibold hover:scale-105 transition-all cursor-pointer {% if summary.monthly_surplus >= 0 %}bg-emerald-50 text-emerald-700 border border-emerald-100 hover:bg-emerald-100{% else %}bg-rose-50 text-rose-700 border border-rose-100 hover:bg-rose-100{% endif %}" title="View all transactions in this period">
+    <span>{% if summary.monthly_surplus >= 0 %}↑ {{ summary.monthly_surplus | money(sign=True) }} Surplus {{ period_phrase }}{% else %}↓ {{ summary.monthly_surplus | abs | money }} Deficit {{ period_phrase }}{% endif %}</span>
+    <span class="text-[0.625rem] opacity-70">›</span>
+  </a>
+</div>
+{% elif id == "budget" %}
+<a href="/budget" class="block kash-card p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:border-slate-200 transition-colors">
+  <div class="flex items-center justify-between mb-2">
+    <span class="font-bold text-sm text-slate-900">Budget</span>
+    <span class="text-slate-400 text-xs">›</span>
+  </div>
+  <!-- Progress Bar -->
+  <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden my-2.5">
+    <div class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: {{ "{:.1f}".format(budget_pct) }}%;"></div>
+  </div>
+  <div class="flex items-center justify-between text-xs">
+    {% if summary.budget_total_budgeted > 0 %}
+    <span class="text-slate-500 font-medium">{{ summary.budget_remaining | money }} remaining</span>
+    <span class="font-bold text-slate-700">{{ "{:.0f}".format(summary.budget_pct_used) }}%</span>
+    {% else %}
+    <span class="text-slate-500 font-medium">No budget set for this month</span>
+    <span class="font-semibold text-emerald-600">Set up ›</span>
+    {% endif %}
+  </div>
+</a>
+{% elif id == "recent" %}
+<div class="space-y-2.5 pt-1">
+  <div class="flex items-center justify-between px-1">
+    <h3 class="font-bold text-base text-slate-900">Recent Transactions</h3>
+    <a href="/transactions" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700">View all</a>
+  </div>
+
+  <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl divide-y divide-slate-100 overflow-hidden">
+    {% for tx in recent_transactions %}
+    <div role="button" tabindex="0" onclick="{{ tx_click(tx) }}" onkeydown="if (event.key === 'Enter') this.click()" title="View details, set category, or create a rule" class="p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer">
+      <div class="flex items-center gap-3">
+        {{ merchant_box(transaction_icon(tx), "receipt" if tx.amount < 0 else "bank", fallback_class="bg-slate-100 text-slate-700" if tx.amount < 0 else "bg-emerald-100 text-emerald-600") }}
+        <div>
+          <div class="font-bold text-sm text-slate-900 leading-snug">{{ tx.clean_description }}</div>
+          <div class="text-xs text-slate-400">{{ tx.merchant_name or tx.date | fulldate }}</div>
+        </div>
+      </div>
+      <div class="text-right">
+        <div class="font-bold text-sm {% if tx.amount < 0 %}text-rose-500{% else %}text-emerald-600{% endif %}">
+          {{ tx.amount | money(sign=True) }}
+        </div>
+        <div class="text-[0.6875rem] text-slate-400">{{ tx.date | day }}</div>
+      </div>
+    </div>
+    {% else %}
+    <div class="p-5 text-center text-xs text-slate-400">
+      No recent transactions found.
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% elif id == "categories" %}{{ card_categories(uid="donut-m") }}
+{% elif id == "sankey" %}{{ card_sankey(chart=sankey_mobile) }}
+{% elif id == "bills" %}{{ card_bills() }}
+{% elif id == "cash_flow" %}{{ card_cash_flow() }}
+{% endif %}
+{%- endmacro %}
+
+{% set spans = {4: "col-span-4", 5: "col-span-5", 6: "col-span-6", 7: "col-span-7", 8: "col-span-8", 12: "col-span-12"} %}
+{% macro desktop_card(placed) -%}
+{% set cls = spans[placed.span] %}
+{% if placed.id == "stats" %}{{ card_stats(cls) }}
+{% elif placed.id == "categories" %}{{ card_categories(cls, "donut-d") }}
+{% elif placed.id == "sankey" %}{{ card_sankey(cls, sankey_desktop) }}
+{% elif placed.id == "recent" %}{{ card_recent_desktop(cls) }}
+{% elif placed.id == "bills" %}{{ card_bills(cls) }}
+{% elif placed.id == "budget" %}{{ card_budget_desktop(cls) }}
+{% elif placed.id == "cash_flow" %}{{ card_cash_flow(cls) }}
+{% endif %}
+{%- endmacro %}
+
+{% macro customize_button(label=true) -%}
+<button type="button" onclick="kashCustomize.open()" class="{% if label %}inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold{% else %}w-9 h-9 rounded-full flex items-center justify-center{% endif %} bg-white border border-slate-200 text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" aria-label="Customize dashboard" title="Customize dashboard">
+  {{ icon("sliders", "w-4 h-4") }}{% if label %}<span>Customize</span>{% endif %}
+</button>
+{%- endmacro %}
+
+<!-- ======================================================================
+     MOBILE VIEW
+     ====================================================================== -->
+<div class="md:hidden space-y-4 pb-4">
+  <!-- Mobile Top Header: Greeting & Action Icons -->
+  <div class="flex items-center justify-between pt-1 pb-1">
+    <div>
+      {% set user_name = request.state.user_name | default("") %}
+      {% if user_name %}
+      <div class="text-xs font-medium text-slate-500">{{ greeting }},</div>
+      <div class="text-2xl font-extrabold text-slate-900 tracking-tight leading-tight">{{ user_name }}</div>
+      {% else %}
+      <div class="text-2xl font-extrabold text-slate-900 tracking-tight leading-tight">{{ greeting }}</div>
+      {% endif %}
+    </div>
+    <div class="flex items-center gap-2.5">
+      {{ customize_button(false) }}
+      <a href="/transactions" class="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors">
+        {{ icon("search", "w-4 h-4") }}
+      </a>
+      <a href="/settings" class="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors">
+        {{ icon("settings", "w-4 h-4") }}
+      </a>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-end -mt-1">
+    {{ month_nav() }}
+  </div>
+
+  {{ needs_category_banner() }}
+
+  {% set compare_name = "Last month" if range.is_current else (compare_label | replace("vs ", "", 1)) %}
+  {% for placed in layouts.mobile %}
+  {{ mobile_card(placed.id) }}
+  {% else %}
+  <div class="kash-card p-6 text-center text-xs text-slate-400 bg-white border border-slate-100 rounded-2xl">Your dashboard has no cards.</div>
+  {% endfor %}
+
+  <div class="flex justify-center pt-2">
+    <button type="button" onclick="kashCustomize.open()" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors">
+      {{ icon("sliders", "w-3.5 h-3.5") }} Customize dashboard
+    </button>
+  </div>
+</div>
+
+<!-- ======================================================================
+     DESKTOP VIEW
+     ====================================================================== -->
+<div class="hidden md:block space-y-6">
+
+  <div class="flex items-center justify-between">
+    <div>
+      <h2 class="text-2xl font-bold tracking-tight text-slate-900">Dashboard</h2>
+      <p class="text-xs text-slate-400 mt-0.5">Financial overview, balances, and quick insights</p>
+    </div>
+    <div class="flex items-center gap-3">
+      {{ customize_button() }}
+      {{ month_nav() }}
+    </div>
+  </div>
+
+  {{ needs_category_banner() }}
+
+  <div class="grid grid-cols-12 gap-x-5 gap-y-6">
+    {% for placed in layouts.desktop %}
+    {{ desktop_card(placed) }}
+    {% else %}
+    <div class="col-span-12 kash-card p-8 text-center text-sm text-slate-400 bg-white border border-slate-100 rounded-2xl">Your dashboard has no cards. <button type="button" onclick="kashCustomize.open()" class="font-semibold text-emerald-600 hover:underline">Add some</button></div>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+  // Spending donut: hovering a slice or legend row highlights it (each copy on the page).
+  document.querySelectorAll("[data-donut]").forEach(root => {
+    const value = root.querySelector("[data-donut-value]");
+    const label = root.querySelector("[data-donut-label]");
+    const total = [value.textContent, label.textContent];
+    const rows = [...root.querySelectorAll(".kash-legend")];
+    function show(i) {
+      root.querySelectorAll(".kash-slice").forEach(c => {
+        const on = i === null || c.dataset.slice === String(i);
+        c.style.opacity = on ? "1" : "0.25";
+        c.setAttribute("stroke-width", i !== null && on ? "15" : "12");
+      });
+      rows.forEach(r => r.classList.toggle("bg-slate-50", r.dataset.slice === String(i)));
+      const row = i === null ? null : rows[i];
+      value.textContent = row ? row.dataset.amount : total[0];
+      label.textContent = row ? row.dataset.name + " · " + row.dataset.pct + "%" : total[1];
+    }
+    root.querySelectorAll(".kash-slice, .kash-legend").forEach(el => {
+      el.addEventListener("mouseenter", () => show(Number(el.dataset.slice)));
+      el.addEventListener("mouseleave", () => show(null));
+    });
+    root.querySelectorAll(".kash-slice").forEach(c =>
+      c.addEventListener("click", () => rows[Number(c.dataset.slice)].click()));
+  });
+</script>
+
+{% include "components/dashboard_customize.html" %}
+{% include "components/tx_modal.html" %}
+{% endblock %}

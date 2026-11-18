@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}AI activity - Kash{% endblock %}
+
+{% block content %}
+{# Not an inbox: transactions still needing a category live in Transactions → Uncategorized.
+   This page is for looking back, undoing, approving rule proposals, and running by hand. #}
+<div class="space-y-4 max-w-4xl mx-auto pb-4">
+
+  <div class="pt-1 pb-1">
+    <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">AI activity</h2>
+    <p class="text-xs text-slate-500">
+      After your rules, AI categorizes what's left{% if after_sync %} after each sync{% endif %}. When it's at least {{ threshold }}% sure the category is applied; otherwise the transaction stays in
+      <a href="/transactions?category_id=none" class="font-semibold text-emerald-600 hover:underline">Uncategorized</a>.
+      <a href="/settings" class="font-semibold text-emerald-600 hover:underline">Settings</a>
+    </p>
+  </div>
+
+  {% if not ai_ready %}
+  <div class="kash-card p-4 bg-amber-50 border border-amber-200 rounded-2xl text-sm text-amber-800">
+    AI categorization is off. <a href="/settings" class="font-semibold underline">Turn it on in Settings</a>.
+  </div>
+  {% endif %}
+  {% if running %}
+  <div class="kash-card p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-sm text-emerald-800 flex items-center justify-between gap-3">
+    <span>AI is categorizing transactions now…</span>
+    <a href="/ai/review" class="font-semibold underline whitespace-nowrap">Refresh</a>
+  </div>
+  {% endif %}
+
+  <!-- Rule proposals (collapsed): nothing changes until approved -->
+  {% if proposals %}
+  <details id="ai-proposals" class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl overflow-hidden">
+    <summary class="p-4 cursor-pointer select-none flex items-center justify-between gap-3">
+      <span>
+        <span class="block font-bold text-base text-slate-900">Suggested rule changes</span>
+        <span class="block text-[0.6875rem] text-slate-400">{{ proposals | length }} waiting for your approval · future transactions from that merchant are categorized by your rules, without AI</span>
+      </span>
+      <span class="px-2 py-0.5 rounded-full text-[0.625rem] font-bold bg-amber-50 text-amber-700 flex-shrink-0">{{ proposals | length }}</span>
+    </summary>
+    <div class="divide-y divide-slate-100 border-t border-slate-100">
+      {% for p in proposals %}
+      <div class="p-4 space-y-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="font-bold text-sm text-slate-900 break-words">{{ p.condition.value }} → {{ p.category.name }}</div>
+            <div class="text-xs text-slate-600 mt-0.5">
+              {% if p.rule %}Add to your rule <span class="font-semibold text-slate-900">{{ p.rule.name }}</span>:{% else %}New rule <span class="font-semibold text-slate-900">{{ p.category.name }}</span> (after your own rules):{% endif %}
+              <span class="font-mono text-[0.6875rem] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-700 whitespace-nowrap">{{ p.condition.field }} contains “{{ p.condition.value }}”</span>
+            </div>
+          </div>
+          <span class="px-2 py-0.5 rounded-full text-[0.625rem] font-bold bg-emerald-50 text-emerald-700 flex-shrink-0">{{ p.evidence | length }} match{{ "es" if p.evidence | length != 1 }}</span>
+        </div>
+        <p class="text-[0.6875rem] text-slate-500">{{ p.reason }}{% if p.will_categorize %} It will also categorize {{ p.will_categorize }} uncategorized transaction{{ "s" if p.will_categorize != 1 }}.{% endif %}</p>
+        <ul class="text-[0.6875rem] text-slate-500 divide-y divide-slate-100">
+          {% for tx in p.evidence[:3] %}
+          <li class="py-1 flex justify-between gap-2"><span class="truncate">{{ tx.date | day }} · {{ tx.clean_description }}</span><span class="font-semibold text-slate-700 whitespace-nowrap">{{ tx.amount | money(sign=True) }}</span></li>
+          {% endfor %}
+          {% if p.evidence | length > 3 %}<li class="py-1 text-slate-400">+ {{ p.evidence | length - 3 }} more</li>{% endif %}
+        </ul>
+        <div class="flex flex-wrap items-center gap-2">
+          <form method="post" action="/ai/proposals/{{ p.key }}/apply"><button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors">Approve</button></form>
+          <form method="post" action="/ai/proposals/{{ p.key }}/dismiss"><button type="submit" class="px-3 py-2 text-sm font-medium text-slate-500 hover:text-slate-800 rounded-xl transition-colors">Dismiss</button></form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
+
+  <!-- Recent AI categorization (collapsed) -->
+  <details id="ai-recent" class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl overflow-hidden" {% if show_all %}open{% endif %}>
+    <summary class="p-4 cursor-pointer select-none flex items-center justify-between gap-3">
+      <span>
+        <span class="block font-bold text-base text-slate-900">Recent AI categorization</span>
+        <span class="block text-[0.6875rem] text-slate-400">{% if history_total %}{{ history_total }} transaction{{ "s" if history_total != 1 }} · undo any the AI got wrong, use its guesses, or see what it passed on{% else %}Nothing yet{% endif %}</span>
+      </span>
+      <span class="px-2 py-0.5 rounded-full text-[0.625rem] font-bold bg-emerald-50 text-emerald-700">AI</span>
+    </summary>
+    {% if retry_count %}
+    <div class="px-4 py-3 border-t border-slate-100 flex items-center justify-between gap-3">
+      <span class="text-[0.6875rem] text-slate-500">{{ retry_count }} still uncategorized after the AI had no answer</span>
+      <form method="post" action="/ai/ask-again">
+        <button type="submit" class="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-lg transition-colors disabled:opacity-50" {% if not ai_ready or running %}disabled{% endif %}>Ask again for all</button>
+      </form>
+    </div>
+    {% endif %}
+    {% if history %}
+    <ul class="divide-y divide-slate-100 border-t border-slate-100">
+      {% for row in history %}
+      {% set tx = row.transaction %}
+      <li class="p-3.5 flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <div class="text-sm font-semibold text-slate-900 truncate">{{ tx.merchant_name or tx.clean_description }}</div>
+          <div class="text-[0.6875rem] text-slate-400">
+            {{ tx.date | day }} · {{ tx.amount | money(sign=True) }} ·
+            {% if row.suggestion.status.value == "unknown" %}
+            <span class="text-slate-600 font-medium">No answer</span>{% if row.suggestion.reason %} · {{ row.suggestion.reason }}{% endif %}
+            {% else %}
+            {% if row.suggestion.status.value == "pending" %}<span class="text-amber-600 font-semibold">Guess</span> · {% endif %}<span class="text-slate-600 font-medium">{{ row.category.name if row.category else "?" }}</span> · {{ row.percent }}% sure
+            {% endif %}
+          </div>
+        </div>
+        {% if row.active %}
+        <form method="post" action="/ai/undo" class="flex-shrink-0">
+          <input type="hidden" name="ids" value="{{ row.suggestion.id }}" />
+          <button type="submit" class="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-lg transition-colors">Undo</button>
+        </form>
+        {% elif row.suggestion.status.value == "pending" %}
+        {% if row.current %}
+        <span class="text-[0.6875rem] text-slate-400 text-right flex-shrink-0">You chose<br>{{ row.current.name }}</span>
+        {% else %}
+        <form method="post" action="/ai/accept" class="flex-shrink-0">
+          <input type="hidden" name="ids" value="{{ row.suggestion.id }}" />
+          <button type="submit" class="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-lg transition-colors">Use guess</button>
+        </form>
+        {% endif %}
+        {% elif row.suggestion.status.value == "unknown" %}
+        {% if row.current %}
+        <span class="text-[0.6875rem] text-slate-400 text-right flex-shrink-0">You chose<br>{{ row.current.name }}</span>
+        {% else %}
+        <form method="post" action="/ai/ask-again" class="flex-shrink-0">
+          <input type="hidden" name="ids" value="{{ row.suggestion.id }}" />
+          <button type="submit" class="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-lg transition-colors disabled:opacity-50" {% if not ai_ready or running %}disabled{% endif %}>Ask again</button>
+        </form>
+        {% endif %}
+        {% elif row.suggestion.status.value == "rejected" %}
+        <span class="text-[0.6875rem] text-slate-400 flex-shrink-0">Undone</span>
+        {% elif row.suggestion.status.value == "accepted" %}
+        <span class="text-[0.6875rem] text-slate-400 flex-shrink-0">You accepted</span>
+        {% else %}
+        <span class="text-[0.6875rem] text-slate-400 text-right flex-shrink-0" title="You changed this transaction's category, so the AI's choice is no longer in use.">You chose<br>{{ row.current.name if row.current else "uncategorized" }}</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% if history_total > history | length %}
+    <a href="/ai/review?show=all" class="block p-3 text-center text-xs font-semibold text-emerald-600 hover:bg-slate-50 border-t border-slate-100">Show all {{ history_total }}</a>
+    {% endif %}
+    {% endif %}
+  </details>
+
+  <!-- Run by hand -->
+  <details id="ai-run" class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl p-4">
+    <summary class="cursor-pointer select-none flex items-center justify-between gap-3">
+      <span>
+        <span class="block font-bold text-base text-slate-900">Categorize now</span>
+        <span class="block text-[0.6875rem] text-slate-400">{{ candidates.transaction_count }} uncategorized transaction{{ "s" if candidates.transaction_count != 1 }} from {{ candidates.groups | length }} merchant{{ "s" if candidates.groups | length != 1 }} not sent to AI yet</span>
+      </span>
+      {{ icon("sparkles", "w-5 h-5 text-emerald-500 flex-shrink-0") }}
+    </summary>
+    <div class="pt-3 space-y-3">
+      <p class="text-[0.6875rem] text-slate-500">
+        Each transaction is sent once, with the bank's original description (long numbers masked). What the AI should leave alone, such as Zelle or Venmo payments, is up to the prompt in Advanced settings; anything it can't place stays in
+        <a href="/transactions?category_id=none" class="font-semibold text-emerald-600 hover:underline">Uncategorized</a>.
+      </p>
+      <div class="flex flex-wrap gap-2">
+        <form method="post" action="/ai/run">
+          <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50" {% if not ai_ready or not candidates.groups or running %}disabled{% endif %}>Categorize now</button>
+        </form>
+        <button type="button" hx-get="/ai/run/preview" hx-target="#ai-preview" class="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-sm font-semibold text-slate-700 rounded-xl transition-colors">See what will be sent</button>
+      </div>
+      <div id="ai-preview"></div>
+    </div>
+  </details>
+
+  <!-- Conditions the AI added to rules (after approval) -->
+  {% if ai_conditions %}
+  <details id="ai-conditions" class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl p-4">
+    <summary class="cursor-pointer select-none">
+      <span class="font-bold text-base text-slate-900">Rule conditions added by AI</span>
+      <span class="block text-[0.6875rem] text-slate-400">Only these can be removed here; conditions you wrote are never changed.</span>
+    </summary>
+    <ul class="mt-2 divide-y divide-slate-100">
+      {% for item in ai_conditions %}
+      <li class="py-2 flex items-center justify-between gap-3 text-xs">
+        <span class="min-w-0">
+          <span class="font-semibold text-slate-900">{{ item.rule.name }}</span>:
+          <span class="font-mono text-[0.6875rem] text-slate-600">{{ item.condition.field }} {{ item.condition.op | replace("_", " ") }} “{{ item.condition.value }}”</span>
+          {% if not item.active %}<span class="text-slate-400">(no longer in the rule)</span>{% endif %}
+        </span>
+        {% if item.active %}
+        <form method="post" action="/ai/rules/{{ item.rule.id }}/conditions/{{ item.index }}/remove" class="flex-shrink-0">
+          <button type="submit" class="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-rose-600 rounded-lg transition-colors">Remove</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+
+  <!-- Activity log -->
+  {% if runs %}
+  <details id="ai-requests" class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl p-4 text-xs">
+    <summary class="cursor-pointer font-semibold text-slate-700 select-none">Requests to the AI</summary>
+    <ul class="mt-2 divide-y divide-slate-100 text-slate-500">
+      {% for r in runs %}
+      <li class="py-1.5 flex flex-wrap justify-between gap-2">
+        <span>{{ r.started_at | fulldate }} {{ r.started_at | clock }} · {{ "after sync" if r.trigger == "sync" else "by hand" }} · {{ r.model }}</span>
+        <span>{{ r.items_sent }} merchant{{ "s" if r.items_sent != 1 }} · {{ r.prompt_tokens }} in / {{ r.completion_tokens }} out tokens{% if r.status != "ok" %} · <span class="text-rose-600">{{ r.status }}{% if r.error %}: {{ r.error }}{% endif %}</span>{% endif %}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+
+</div>
+{% endblock %}

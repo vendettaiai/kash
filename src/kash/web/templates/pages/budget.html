@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}Budget - Kash{% endblock %}
+
+{% block content %}
+<div class="space-y-4 max-w-4xl mx-auto pb-4">
+
+  <!-- Mobile Top Bar: Month Selector & Add Budget Button -->
+  <div class="flex items-center justify-between pt-1 pb-1">
+    <div class="flex items-center gap-2">
+      <a href="/budget?month={{ prev_month }}" class="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" title="Previous Month">
+        {{ icon("chevron-left", "w-4 h-4") }}
+      </a>
+      <div class="flex items-center gap-1.5 font-extrabold text-base text-slate-900">
+        <span>{{ period_label }}</span>
+      </div>
+      <a href="/budget?month={{ next_month }}" class="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" title="Next Month">
+        {{ icon("chevron-right", "w-4 h-4") }}
+      </a>
+    </div>
+    <button onclick="openBudgetModal('', '', '')" class="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" title="Set Category Budget">
+      {{ icon("plus", "w-4 h-4") }}
+    </button>
+  </div>
+
+  <!-- Circular Budget Progress Donut Gauge -->
+  <div class="kash-card p-6 bg-white border border-slate-100 shadow-sm rounded-2xl flex flex-col items-center">
+    <div class="relative w-48 h-48 flex items-center justify-center my-2">
+      <!-- SVG Gauge Ring -->
+      {% set pct_clamped = [budget_pct_used, 100] | min %}
+      {% set dash_offset = (301.6 * (100 - pct_clamped) / 100) %}
+      <svg class="w-full h-full donut-gauge-ring" viewBox="0 0 120 120">
+        <!-- Background Track -->
+        <circle cx="60" cy="60" r="48" stroke="var(--kash-border)" stroke-width="11" fill="none" />
+        <!-- Progress Fill -->
+        <circle 
+          cx="60" 
+          cy="60" 
+          r="48" 
+          stroke="{% if budget_pct_used > 100 %}#ef4444{% elif budget_pct_used > 85 %}#f59e0b{% else %}#059669{% endif %}" 
+          stroke-width="11" 
+          stroke-dasharray="301.6" 
+          stroke-dashoffset="{{ dash_offset }}" 
+          stroke-linecap="round" 
+          fill="none" 
+        />
+      </svg>
+
+      <!-- Center Metric Content -->
+      <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+        <span class="text-3xl font-extrabold tracking-tight text-slate-900 leading-none">{{ budget_pct_used }}%</span>
+        <span class="text-xs font-bold text-slate-700 mt-1">{{ available_funds | money }}</span>
+        <span class="text-[0.625rem] text-slate-400 font-medium">remaining</span>
+      </div>
+    </div>
+
+    <!-- Spent vs Budgeted Summary Stats -->
+    <div class="grid grid-cols-2 gap-8 w-full max-w-xs pt-4 mt-2 border-t border-slate-100 text-center">
+      <div>
+        <span class="text-[0.6875rem] text-slate-400 font-medium">Spent</span>
+        <p class="text-base font-bold text-slate-900 mt-0.5">{{ total_spent | money }}</p>
+      </div>
+      <div>
+        <span class="text-[0.6875rem] text-slate-400 font-medium">Budgeted</span>
+        <p class="text-base font-bold text-slate-900 mt-0.5">{{ total_budgeted | money }}</p>
+      </div>
+    </div>
+    {% if unbudgeted_spent > 0 %}
+    <p class="text-[0.6875rem] text-slate-400 text-center">+ {{ unbudgeted_spent | money }} in categories without a budget (listed below)</p>
+    {% endif %}
+  </div>
+
+  <!-- Category Envelopes -->
+  <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl p-4 md:p-5 space-y-4">
+    {% for cp in category_progress %}
+    <div role="button" tabindex="0" title="Edit budget"
+      onclick="openBudgetModal('{{ cp.category_id }}', {{ cp.category_name | tojson | forceescape }}, '{{ '%.2f' | format(cp.budgeted) if cp.budgeted > 0 else '' }}')"
+      onkeydown="if (event.key === 'Enter') this.click()"
+      class="space-y-2 -mx-2 px-2 py-1.5 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors">
+      <div class="flex items-center justify-between text-xs">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl flex items-center justify-center text-white flex-shrink-0" style="background-color: {{ cp.category_color or '#6366f1' }};">
+            {{ icon(cp.category_icon or 'tag', "w-4 h-4") }}
+          </div>
+          <span class="font-bold text-slate-900 text-sm">{{ cp.category_name }}</span>
+        </div>
+
+        <div class="text-right flex items-center gap-3">
+          <span class="text-slate-500 font-medium">
+            {{ cp.spent_amount | money(0) }} / {{ cp.effective_budget | money(0) }}
+          </span>
+          <span class="font-bold text-slate-900 w-11 text-right">
+            {% if cp.effective_budget > 0 %}
+            {{ (cp.spent_amount / cp.effective_budget * 100) | round | int }}%
+            {% else %}
+            <span class="text-emerald-600 text-[0.6875rem]">+ Set</span>
+            {% endif %}
+          </span>
+        </div>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+        <div 
+          class="h-full rounded-full transition-all duration-500" 
+          style="width: {% if cp.effective_budget > 0 %}{{ [((cp.spent_amount / cp.effective_budget * 100) | round | int), 100] | min }}%{% else %}0%{% endif %}; background-color: {{ cp.category_color or '#6366f1' }};"
+        ></div>
+      </div>
+    </div>
+    {% else %}
+    <div class="py-8 text-center text-xs text-slate-400">
+      No expense transactions or budgets recorded for {{ period_label }}. Click '+' to set your first budget.
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+
+<!-- Set / Edit Category Budget Modal -->
+<dialog id="add_budget_modal" class="modal">
+  <div class="modal-box rounded-2xl bg-white border border-slate-200">
+    <h3 id="budget_modal_title" class="font-bold text-lg text-slate-900 mb-1">Set Budget</h3>
+    <p class="text-xs text-slate-500 mb-4">Applies to {{ period_label }} and carries forward to later months until you change it.</p>
+    <form method="POST" action="/budget/set" class="space-y-4">
+      <input type="hidden" name="period" value="{{ period }}" />
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1" for="budget_category">Category</label>
+        <select id="budget_category" name="category_id" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+          {% for cat in categories %}
+          <option value="{{ cat.id }}">{{ cat.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1" for="budget_amount">Monthly Budget Amount ($)</label>
+        <input id="budget_amount" type="number" step="0.01" min="0" name="amount" placeholder="500.00" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500" required />
+      </div>
+      <div class="flex items-center justify-between gap-2 pt-2">
+        <button id="budget_remove_btn" type="submit" name="remove" value="1" formnovalidate class="hidden px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-xl transition-colors">Remove budget</button>
+        <div class="flex items-center gap-2 ml-auto">
+          <button type="button" onclick="add_budget_modal.close()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors">Save Budget</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<script>
+  function openBudgetModal(categoryId, categoryName, amount) {
+    const editing = Boolean(categoryId && amount);
+    document.getElementById("budget_modal_title").textContent = editing
+      ? "Edit " + categoryName + " budget"
+      : (categoryName ? "Set " + categoryName + " budget" : "Set Budget");
+    if (categoryId) document.getElementById("budget_category").value = categoryId;
+    document.getElementById("budget_amount").value = amount || "";
+    document.getElementById("budget_remove_btn").classList.toggle("hidden", !editing);
+    add_budget_modal.showModal();
+    document.getElementById("budget_amount").focus();
+  }
+</script>
+{% endblock %}

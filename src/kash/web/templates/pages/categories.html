@@ -1,0 +1,452 @@
+{% extends "base.html" %}
+
+{% block title %}Categories - Kash{% endblock %}
+
+{% block content %}
+<div class="space-y-4 max-w-5xl mx-auto pb-8">
+
+  <!-- Top Page Header matching Transactions/Accounts -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 pb-1">
+    <div>
+      <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Categories</h2>
+      <p class="text-xs text-slate-400 mt-0.5">Organize spending, income, and transfer categories grouped by budget area</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <button 
+        type="button" 
+        id="toggle-all-groups-btn" 
+        onclick="toggleAllGroups()" 
+        class="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 select-none"
+      >
+        {{ icon("chevrons-up-down", "w-3.5 h-3.5 text-slate-500") }}
+        {# app.css shows "Expand all" once every group is collapsed #}
+        <span class="kash-collapse-all">Collapse all</span><span class="kash-expand-all">Expand all</span>
+      </button>
+
+      <button 
+        type="button" 
+        onclick="document.getElementById('new_group_modal').showModal()" 
+        class="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+      >
+        {{ icon("plus", "w-3.5 h-3.5 text-slate-500") }}
+        <span>Add Group</span>
+      </button>
+
+      <button 
+        type="button" 
+        onclick="document.getElementById('new_category_modal').showModal()" 
+        class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+      >
+        {{ icon("plus", "w-3.5 h-3.5") }}
+        <span>Add Category</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Card Container: Crisp White Card with Rounded Corners & Subtle Border -->
+  <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl overflow-hidden divide-y divide-slate-100">
+    {% for group in groups %}
+    {% set group_cats = categories | selectattr("group_id", "equalto", group.id) | list %}
+    <div class="group-container">
+      
+      <!-- Group Header Row -->
+      <div 
+        class="py-3.5 px-5 bg-slate-50/70 hover:bg-slate-50 flex items-center justify-between cursor-pointer select-none transition-colors border-b border-slate-100"
+        onclick="toggleGroup('group-{{ group.id }}')"
+      >
+        <div class="flex items-center gap-3 min-w-0">
+          <span id="chevron-group-{{ group.id }}" class="kash-group-chevron text-slate-400 transition-transform duration-200">
+            {{ icon("chevron-down", "w-4 h-4") }}
+          </span>
+          <div
+            class="w-8 h-8 rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs"
+            style="background-color: {{ group.color }};"
+          >
+            {{ icon(group.icon, "w-4 h-4") }}
+          </div>
+          <h3 class="font-bold text-sm text-slate-900 truncate">
+            {{ group.name }}
+          </h3>
+          <span class="text-xs text-slate-400 font-semibold px-2 py-0.5 rounded-full bg-slate-200/60">
+            {{ group_cats|length }}
+          </span>
+        </div>
+
+        <!-- Group Actions -->
+        <div class="flex items-center gap-1" onclick="event.stopPropagation()">
+          <button
+            type="button"
+            onclick="openAddCategoryForGroup('{{ group.id }}')"
+            class="w-7 h-7 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 flex items-center justify-center transition-colors"
+            title="Add category to {{ group.name }}"
+          >
+            {{ icon("plus", "w-3.5 h-3.5") }}
+          </button>
+          <button
+            type="button"
+            onclick="openEditGroupModal('{{ group.id }}', {{ group.name | tojson | forceescape }})"
+            class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 flex items-center justify-center transition-colors"
+            title="Edit group"
+          >
+            {{ icon("pencil", "w-3.5 h-3.5") }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Group Categories List -->
+      {# data-keep-hidden: stays collapsed after a save (static/js/kash.js) #}
+      <div id="group-{{ group.id }}" class="group-content divide-y divide-slate-100" data-keep-hidden>
+        {% if group_cats|length == 0 %}
+        <div class="py-4 px-5 text-center text-xs text-slate-400 italic">
+          No categories in this group yet. Click + to add one.
+        </div>
+        {% else %}
+        {% for cat in group_cats %}
+        <div class="py-3 px-5 flex items-center justify-between hover:bg-slate-50/60 transition-colors">
+          <!-- Left: Category Icon, Name, and Badges -->
+          <div class="flex items-center gap-3 min-w-0">
+            <div
+              class="w-7 h-7 rounded-lg flex items-center justify-center text-white shrink-0 shadow-xs"
+              style="background-color: {{ cat.color }};"
+            >
+              {{ icon(cat.icon, "w-3.5 h-3.5") }}
+            </div>
+            <span class="font-semibold text-sm text-slate-900 truncate">{{ cat.name }}</span>
+
+            {% if cat.is_transfer %}
+            <span class="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/60 text-[0.625rem] font-bold tracking-wider uppercase">
+              Transfer
+            </span>
+            {% endif %}
+
+            {% if cat.is_hidden %}
+            <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[0.625rem] font-semibold">
+              Hidden
+            </span>
+            {% endif %}
+          </div>
+
+          <!-- Right: Hex Color Chip and Actions -->
+          <div class="flex items-center gap-3">
+            <span class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-slate-50 border border-slate-200/80 text-slate-600 text-xs font-mono font-medium">
+              <span class="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs" style="background-color: {{ cat.color }};"></span>
+              <span>{{ cat.color }}</span>
+            </span>
+
+            <div class="flex items-center gap-1">
+              <button
+                type="button"
+                onclick="openEditCategoryModal('{{ cat.id }}', {{ cat.name | tojson | forceescape }}, {{ cat.icon | tojson | forceescape }}, {{ cat.color | tojson | forceescape }}, '{{ cat.group_id or '' }}', {{ 'true' if cat.is_transfer else 'false' }}, {{ 'true' if cat.is_hidden else 'false' }})"
+                class="w-8 h-8 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors"
+                title="Edit category"
+              >
+                {{ icon("pencil", "w-3.5 h-3.5") }}
+              </button>
+
+              <form action="/categories/{{ cat.id }}/hide" method="POST" class="inline">
+                <button
+                  type="submit"
+                  class="w-8 h-8 rounded-xl transition-colors flex items-center justify-center {% if cat.is_hidden %}text-slate-300 hover:text-slate-600 hover:bg-slate-100{% else %}text-slate-400 hover:text-slate-700 hover:bg-slate-100{% endif %}"
+                  title="{% if cat.is_hidden %}Category is hidden from pickers. Click to show.{% else %}Category visible in pickers. Click to hide.{% endif %}"
+                >
+                  {% if cat.is_hidden %}
+                    {{ icon("eye-off", "w-3.5 h-3.5") }}
+                  {% else %}
+                    {{ icon("eye", "w-3.5 h-3.5") }}
+                  {% endif %}
+                </button>
+              </form>
+
+              <form action="/categories/{{ cat.id }}/delete" method="POST" class="inline">
+                <button
+                  type="submit"
+                  onclick="return confirm({{ ('Delete category “' ~ cat.name ~ '”? Its transactions will become uncategorized.') | tojson | forceescape }})"
+                  class="w-8 h-8 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors"
+                  title="Delete category"
+                >
+                  {{ icon("trash", "w-3.5 h-3.5") }}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+      </div>
+
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+
+
+<!-- =================================================================== -->
+<!-- MODAL: ADD CATEGORY                                                 -->
+<!-- =================================================================== -->
+<dialog id="new_category_modal" class="modal">
+  <div class="modal-box rounded-2xl bg-white border border-slate-200 shadow-2xl p-6 text-slate-900 max-w-md">
+    <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+      <h3 class="font-bold text-lg text-slate-900">Add New Category</h3>
+      <form method="dialog"><button class="text-slate-400 hover:text-slate-600">✕</button></form>
+    </div>
+
+    <form action="/categories/new" method="POST" class="space-y-4 pt-4">
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Category Name</label>
+        <input
+          type="text"
+          name="name"
+          required
+          placeholder="e.g. Pet Care, Coffee, Gaming"
+          class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+        />
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Category Group</label>
+        <select id="new_cat_group_select" name="group_id" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+          {% for group in groups %}
+          <option value="{{ group.id }}">{{ group.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Icon</label>
+          <select name="icon" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+            <option value="tag" selected>Tag</option>
+            <option value="home">Home</option>
+            <option value="utensils">Food & Dining</option>
+            <option value="shopping-cart">Cart</option>
+            <option value="shopping-bag">Bag</option>
+            <option value="car">Transport</option>
+            <option value="book-open">Education</option>
+            <option value="heart">Health</option>
+            <option value="tv">Leisure</option>
+            <option value="sparkles">Personal Care</option>
+            <option value="smartphone">Subscriptions</option>
+            <option value="landmark">Taxes & Fees</option>
+            <option value="arrow-left-right">Transfers</option>
+            <option value="trending-up">Investments</option>
+            <option value="dollar-sign">Income</option>
+            <option value="help-circle">Other</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Color</label>
+          <input
+            type="color"
+            name="color"
+            value="#8B5CF6"
+            class="w-full h-9 p-1 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer"
+          />
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button type="button" onclick="document.getElementById('new_category_modal').close()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+          Cancel
+        </button>
+        <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors">
+          Save Category
+        </button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+
+<!-- =================================================================== -->
+<!-- MODAL: ADD CATEGORY GROUP                                           -->
+<!-- =================================================================== -->
+<dialog id="new_group_modal" class="modal">
+  <div class="modal-box rounded-2xl bg-white border border-slate-200 shadow-2xl p-6 text-slate-900 max-w-md">
+    <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+      <h3 class="font-bold text-lg text-slate-900">Add Category Group</h3>
+      <form method="dialog"><button class="text-slate-400 hover:text-slate-600">✕</button></form>
+    </div>
+
+    <form action="/categories/groups/new" method="POST" class="space-y-4 pt-4">
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Group Name</label>
+        <input
+          type="text"
+          name="name"
+          required
+          placeholder="e.g. Living Expenses, Discretionary"
+          class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+        />
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Icon</label>
+          <select name="icon" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+            <option value="folder" selected>Folder</option>
+            <option value="home">Home</option>
+            <option value="utensils">Food & Dining</option>
+            <option value="car">Transport</option>
+            <option value="sparkles">Lifestyle</option>
+            <option value="help-circle">Other</option>
+            <option value="trending-up">Income</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Color</label>
+          <input
+            type="color"
+            name="color"
+            value="#64748b"
+            class="w-full h-9 p-1 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer"
+          />
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button type="button" onclick="document.getElementById('new_group_modal').close()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+          Cancel
+        </button>
+        <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors">
+          Save Group
+        </button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+
+<!-- =================================================================== -->
+<!-- MODAL: EDIT CATEGORY                                                -->
+<!-- =================================================================== -->
+<dialog id="edit_category_modal" class="modal">
+  <div class="modal-box rounded-2xl bg-white border border-slate-200 shadow-2xl p-6 text-slate-900 max-w-md">
+    <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+      <h3 class="font-bold text-lg text-slate-900">Edit Category</h3>
+      <form method="dialog"><button class="text-slate-400 hover:text-slate-600">✕</button></form>
+    </div>
+
+    <form id="edit-category-form" method="POST" class="space-y-4 pt-4">
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Category Name</label>
+        <input
+          type="text"
+          id="edit_cat_name"
+          name="name"
+          required
+          class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+        />
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Category Group</label>
+        <select id="edit_cat_group" name="group_id" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+          {% for group in groups %}
+          <option value="{{ group.id }}">{{ group.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Icon</label>
+          <select id="edit_cat_icon" name="icon" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+            <option value="tag">Tag</option>
+            <option value="home">Home</option>
+            <option value="utensils">Food & Dining</option>
+            <option value="shopping-cart">Cart</option>
+            <option value="shopping-bag">Bag</option>
+            <option value="car">Transport</option>
+            <option value="book-open">Education</option>
+            <option value="heart">Health</option>
+            <option value="tv">Leisure</option>
+            <option value="sparkles">Personal Care</option>
+            <option value="smartphone">Subscriptions</option>
+            <option value="landmark">Taxes & Fees</option>
+            <option value="arrow-left-right">Transfers</option>
+            <option value="trending-up">Investments</option>
+            <option value="dollar-sign">Income</option>
+            <option value="help-circle">Other</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Color</label>
+          <input
+            type="color"
+            id="edit_cat_color"
+            name="color"
+            class="w-full h-9 p-1 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer"
+          />
+        </div>
+      </div>
+
+      <div class="space-y-2 pt-2 border-t border-slate-100">
+        <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+          <input type="checkbox" id="edit_cat_transfer" name="is_transfer" value="true" class="checkbox checkbox-xs rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+          <span class="font-medium">Designate as Transfer category (Investments & Transfers)</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-500">
+          <input type="checkbox" id="edit_cat_hidden" name="is_hidden" value="true" class="checkbox checkbox-xs rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+          <span>Hide from category pickers</span>
+        </label>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button type="button" onclick="document.getElementById('edit_category_modal').close()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+          Cancel
+        </button>
+        <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors">
+          Save Changes
+        </button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+
+<!-- Client JS for toggling and modals -->
+<script>
+  // Collapsing only toggles .hidden; the chevrons and the "Collapse all" label follow in CSS
+  // (app.css), so they stay right when kash.js keeps groups collapsed after a save.
+  function toggleGroup(groupId) {
+    const el = document.getElementById(groupId);
+    if (el) el.classList.toggle('hidden');
+  }
+
+  function toggleAllGroups() {
+    const contents = [...document.querySelectorAll('.group-content')];
+    const anyOpen = contents.some(c => !c.classList.contains('hidden'));
+    contents.forEach(c => c.classList.toggle('hidden', anyOpen));
+  }
+
+  function openAddCategoryForGroup(groupId) {
+    document.getElementById('new_cat_group_select').value = groupId;
+    document.getElementById('new_category_modal').showModal();
+  }
+
+  function openEditCategoryModal(id, name, icon, color, groupId, isTransfer, isHidden) {
+    const form = document.getElementById('edit-category-form');
+    form.action = '/categories/' + id + '/update';
+    document.getElementById('edit_cat_name').value = name;
+    document.getElementById('edit_cat_icon').value = icon;
+    document.getElementById('edit_cat_color').value = color;
+    document.getElementById('edit_cat_group').value = groupId;
+    document.getElementById('edit_cat_transfer').checked = isTransfer;
+    document.getElementById('edit_cat_hidden').checked = isHidden;
+    document.getElementById('edit_category_modal').showModal();
+  }
+
+  function openEditGroupModal(id, name) {
+    const newName = prompt('Edit group name:', name);
+    if (newName && newName.trim()) {
+      htmx.ajax('POST', '/categories/groups/' + id + '/update', {
+        target: 'body', swap: 'innerHTML show:none', values: { name: newName.trim() },
+      });
+    }
+  }
+</script>
+{% endblock %}

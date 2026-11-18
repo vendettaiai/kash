@@ -1,0 +1,670 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Kash{% endblock %}
+{% block header_title %}Settings{% endblock %}
+
+{% block content %}
+{% macro tile(name, tint, big=false) -%}
+<div class="{{ 'w-10 h-10' if big else 'w-9 h-9' }} rounded-xl {{ tint }} flex items-center justify-center flex-shrink-0">{{ icon(name, "w-5 h-5" if big else "w-4 h-4") }}</div>
+{%- endmacro %}
+
+{% macro section_head(name, tint, title, desc="") -%}
+<div class="flex items-start gap-3.5">
+  {{ tile(name, tint) }}
+  <div class="min-w-0">
+    <h3 class="font-bold text-base max-lg:text-lg leading-snug">{{ title }}</h3>
+    <p class="text-xs text-base-content/60 mt-0.5">{{ caller() if caller else desc }}</p>
+  </div>
+</div>
+{%- endmacro %}
+
+{# The sections, in page order. The menus show Account as a profile card, then the groups. #}
+{% set sections = {
+  "account": ("user", "bg-teal-50 text-teal-600", "Account"),
+  "display": ("palette", "bg-amber-50 text-amber-600", "Appearance"),
+  "sync": ("refresh-cw", "bg-blue-50 text-blue-600", "Bank sync"),
+  "notifications": ("bell", "bg-rose-50 text-rose-600", "Notifications"),
+  "ai": ("sparkles", "bg-emerald-50 text-emerald-600", "AI categorization"),
+  "people": ("users", "bg-purple-50 text-purple-600", "People"),
+  "data": ("database", "bg-slate-100 text-slate-600", "Data & backup"),
+} %}
+{% set groups = [
+  ("Preferences", ["display", "sync", "notifications"]),
+  ("Automation", ["ai"]),
+  ("Household", ["people", "data"]),
+] %}
+
+{# Phones and tablets: a menu of the sections, then one section per screen (?section=, so
+   Back and saves keep it). From lg: the side menu and every section, as before. #}
+{% set open_section = request.query_params.get("section") %}
+{% if open_section not in sections %}{% set open_section = none %}{% endif %}
+{% macro shown(id) -%}
+kash-settings-section{% if open_section != id %} max-lg:hidden{% endif %}
+{%- endmacro %}
+{% set sync_warn = sync.enabled and sync.error %}
+{% if not sync.enabled %}{% set sync_summary = "Off" %}
+{% elif sync.error %}{% set sync_summary = "Paused: needs attention" %}
+{% elif sync.mode == "cron" %}{% set sync_summary = "Custom schedule" %}
+{% elif sync.interval == 24 %}{% set sync_summary = "Once a day" %}
+{% elif sync.interval == 1 %}{% set sync_summary = "Every hour" %}
+{% elif sync.interval %}{% set sync_summary = "Every " ~ sync.interval ~ " hours" %}
+{% else %}{% set sync_summary = "On" %}{% endif %}
+{% set banks = connections | length %}
+{% if banks and not sync_warn %}{% set sync_summary = sync_summary ~ " · " ~ banks ~ (" bank" if banks == 1 else " banks") %}{% endif %}
+{% set summaries = {
+  "display": {"light": "Light mode", "dark": "Dark mode", "system": "System theme"}.get(my_theme, "Light mode") ~ " · " ~ current.currency,
+  "sync": sync_summary,
+  "notifications": ("On · " ~ push_devices ~ (" device" if push_devices == 1 else " devices")) if push_devices else "Off",
+  "ai": ("On · " ~ ai_presets[ai_provider].label) if ai.ai_enabled else "Off",
+  "people": "Just you" if people | length == 1 else (people | length) ~ " people",
+  "data": "Export your data",
+} %}
+
+{# The section menu. Phones/tablets open a section on its own screen; the desktop menu
+   scrolls to it and marks the one you're looking at (data-settings-link). #}
+{% macro menu(desktop) -%}
+{% set row = "p-3 gap-3" if desktop else "px-4 py-3.5 gap-3.5" %}
+{% set card = "kash-card bg-base-100 border border-base-300 shadow-sm rounded-2xl overflow-hidden" %}
+<div class="{{ card }}">
+  <a href="{{ '#account' if desktop else '/settings?section=account' }}"{% if desktop %} data-settings-link="account"{% endif %} class="flex items-center {{ row }} hover:bg-base-200/60 transition-colors">
+    <div class="{{ 'w-9 h-9 text-sm' if desktop else 'w-12 h-12 text-lg' }} rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold flex-shrink-0">{{ ((account_name or account_email or "K")[:1]) | upper }}</div>
+    <div class="min-w-0 flex-1">
+      <div class="font-bold {{ 'text-sm' if desktop else 'text-base' }} leading-snug truncate">{{ account_name or "Your account" }}</div>
+      <div class="text-xs text-base-content/50 truncate">{{ account_email }}</div>
+    </div>
+    {% if not desktop %}<span class="text-base-content/40">{{ icon("chevron-right", "w-4 h-4") }}</span>{% endif %}
+  </a>
+</div>
+{% for label, ids in groups %}
+<div>
+  <h3 class="px-1 mb-2 text-[0.6875rem] font-bold uppercase tracking-wider text-base-content/50">{{ label }}</h3>
+  <div class="{{ card }} divide-y divide-base-200">
+    {% for id in ids %}{% set ico, tint, title = sections[id] %}
+    <a href="{{ '#' ~ id if desktop else '/settings?section=' ~ id }}"{% if desktop %} data-settings-link="{{ id }}"{% endif %} class="flex items-center {{ row }} hover:bg-base-200/60 transition-colors">
+      {{ tile(ico, tint, big=not desktop) }}
+      <div class="min-w-0 flex-1">
+        <div class="font-bold {{ 'text-sm' if desktop else 'text-base' }} leading-snug">{{ title }}</div>
+        <div class="text-xs truncate {{ 'text-amber-600' if id == 'sync' and sync_warn else 'text-base-content/50' }}">{{ summaries[id] }}</div>
+      </div>
+      {% if not desktop %}<span class="text-base-content/40">{{ icon("chevron-right", "w-4 h-4") }}</span>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endfor %}
+{%- endmacro %}
+
+<div class="flex flex-col gap-5 max-w-5xl mx-auto pb-4">
+
+  <div class="{{ 'max-lg:hidden' if open_section }}">
+    <div class="flex items-center gap-1">
+      <a href="/more" class="md:hidden -ml-2 w-9 h-9 rounded-full flex items-center justify-center text-base-content/70 hover:bg-base-200 transition-colors" aria-label="Back to More">{{ icon("arrow-left", "w-5 h-5") }}</a>
+      <h2 class="text-2xl font-extrabold tracking-tight">Settings</h2>
+    </div>
+    <p class="text-sm text-base-content/60">Customize your Kash experience</p>
+  </div>
+
+  {% if open_section %}
+  <!-- Phones/tablets: back to the menu -->
+  <a href="/settings" class="lg:hidden self-start inline-flex items-center gap-1.5 -ml-1 py-1 text-sm font-semibold text-base-content/70 hover:text-base-content transition-colors">{{ icon("arrow-left", "w-4 h-4") }}Settings</a>
+  {% else %}
+  <!-- Phones/tablets: the sections; each opens on its own screen -->
+  <nav class="lg:hidden flex flex-col gap-4" aria-label="Settings sections">
+    {{ menu(false) }}
+  </nav>
+  <form method="post" action="/logout" hx-boost="false" class="lg:hidden">
+    <button type="submit" class="w-full py-3 rounded-2xl text-base font-semibold text-rose-600 hover:bg-rose-50 transition-colors">Log out</button>
+  </form>
+  <p class="lg:hidden -mt-4 text-center text-xs text-base-content/40">Kash {{ app_version }}</p>
+  {% endif %}
+
+  <div class="lg:grid lg:grid-cols-[15rem_1fr] lg:gap-6 lg:items-start">
+
+  <!-- Section menu (desktop), the same as the phone's -->
+  <nav class="hidden lg:flex flex-col gap-4 sticky top-24" aria-label="Settings sections">
+    {{ menu(true) }}
+    <p class="text-center text-xs text-base-content/40">Kash {{ app_version }}</p>
+  </nav>
+
+  <div class="flex flex-col gap-6 min-w-0">
+
+    <!-- Account: name and password -->
+    <div id="account" class="{{ shown('account') }} scroll-mt-4 md:scroll-mt-24 kash-card bg-base-100 border border-base-300 shadow-sm rounded-2xl p-5 md:p-6 space-y-5">
+      {% call section_head("user", "bg-teal-50 text-teal-600", "Account") %}Logged in as <span class="font-semibold text-base-content">{{ account_email }}</span>.{% endcall %}
+
+      <form method="post" action="/settings/account" class="space-y-2">
+        <div class="flex flex-col sm:flex-row gap-3 sm:items-end">
+          <label class="block flex-1">
+            <span class="block text-xs font-semibold text-base-content/70 mb-1">Your name</span>
+            <input type="text" name="name" value="{{ account_name }}" maxlength="100" autocomplete="name" class="input input-sm input-bordered w-full rounded-xl bg-base-100" />
+          </label>
+          <button type="submit" class="max-lg:py-3 max-lg:text-base px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors">Save</button>
+        </div>
+        <p class="text-[0.6875rem] text-base-content/50">Shown in the greeting and the sidebar.</p>
+      </form>
+
+      <form method="post" action="/settings/password" class="pt-5 border-t border-base-200 space-y-4">
+        <div class="flex items-center gap-2">
+          <span class="text-base-content/40">{{ icon("lock", "w-4 h-4") }}</span>
+          <h4 class="text-sm font-bold">Password</h4>
+          <span class="text-[0.6875rem] text-base-content/50">Changing it logs out your other devices.</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <label class="block">
+            <span class="block text-xs font-semibold text-base-content/70 mb-1">Current password</span>
+            <input type="password" name="current" autocomplete="current-password" required class="input input-sm input-bordered w-full rounded-xl bg-base-100" />
+          </label>
+          <label class="block">
+            <span class="block text-xs font-semibold text-base-content/70 mb-1">New password</span>
+            <input type="password" name="password" autocomplete="new-password" minlength="10" required class="input input-sm input-bordered w-full rounded-xl bg-base-100" />
+          </label>
+          <label class="block">
+            <span class="block text-xs font-semibold text-base-content/70 mb-1">Confirm new password</span>
+            <input type="password" name="confirm" autocomplete="new-password" minlength="10" required class="input input-sm input-bordered w-full rounded-xl bg-base-100" />
+          </label>
+        </div>
+        <div class="flex justify-end">
+          <button type="submit" class="max-lg:w-full max-lg:py-3 max-lg:text-base px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors">Change password</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Appearance: currency, format, theme, text size -->
+    <form id="display" method="post" action="/settings" class="{{ shown('display') }} scroll-mt-4 md:scroll-mt-24 kash-card bg-base-100 border border-base-300 shadow-sm rounded-2xl p-5 md:p-6 space-y-4">
+      {{ section_head("palette", "bg-amber-50 text-amber-600", "Appearance", "Currency and format are for everyone in the household; Kash shows one currency and does not convert. Theme and text size are just for you.") }}
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <label class="block">
+          <span class="block text-xs font-semibold text-base-content/70 mb-1">Currency</span>
+          <select name="currency" class="select select-sm select-bordered w-full rounded-xl bg-base-100">
+            {% for code, (symbol, _) in currencies.items() %}
+            <option value="{{ code }}" {% if code == current.currency %}selected{% endif %}>{{ code }} ({{ symbol }})</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="block">
+          <span class="block text-xs font-semibold text-base-content/70 mb-1">Number &amp; date format</span>
+          <select name="locale" class="select select-sm select-bordered w-full rounded-xl bg-base-100">
+            {% for code, loc in locales.items() %}
+            <option value="{{ code }}" {% if code == current.locale %}selected{% endif %}>{{ loc.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="block">
+          <span class="block text-xs font-semibold text-base-content/70 mb-1">Theme <span class="font-normal text-base-content/50">(just you)</span></span>
+          <select name="theme" class="select select-sm select-bordered w-full rounded-xl bg-base-100">
+            <option value="light" {% if my_theme == "light" %}selected{% endif %}>Light</option>
+            <option value="dark" {% if my_theme == "dark" %}selected{% endif %}>Dark</option>
+            <option value="system" {% if my_theme == "system" %}selected{% endif %}>Follow system</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="block text-xs font-semibold text-base-content/70 mb-1">Text size <span class="font-normal text-base-content/50">(just you)</span></span>
+          <select name="font_scale" class="select select-sm select-bordered w-full rounded-xl bg-base-100">
+            {% for value, label in font_scales.items() %}
+            <option value="{{ value }}" {% if value == my_font_scale %}selected{% endif %}>{{ label }}{% if value != 100 %} ({{ value }}%){% endif %}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <p class="text-xs text-base-content/60">Now: <span class="font-semibold text-base-content">{{ sample.money }}</span> · <span class="font-semibold text-base-content">{{ sample.income }}</span> · <span class="font-semibold text-base-content">{{ today_example | fulldate }}</span></p>
+        <button type="submit" class="max-lg:w-full max-lg:py-3 max-lg:text-base px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors">Save</button>
+      </div>
+    </form>
+
+    <!-- Bank sync -->
+    <form id="sync" method="post" action="/settings/sync" class="{{ shown('sync') }} scroll-mt-4 md:scroll-mt-24 kash-card bg-base-100 border border-base-300 shadow-sm rounded-2xl p-5 md:p-6 space-y-4">
+      {{ section_head("refresh-cw", "bg-blue-50 text-blue-600", "Bank sync", "Kash syncs every bank connection on this schedule, counted from midnight. SimpleFIN allows 24 requests a day; every 4 hours uses 6.") }}
+      <label class="flex items-center gap-2 text-sm font-semibold cursor-pointer">
+        <input type="checkbox" name="enabled" value="1" class="toggle toggle-sm toggle-success" {% if sync.enabled %}checked{% endif %} />
+        Sync automatically
+      </label>
+      {% set cron_mode = sync.mode == "cron" or cron_draft %}
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <label class="block">
+          <span class="block text-xs font-semibold text-base-content/70 mb-1">How often</span>
+          <select name="interval" onchange="document.getElementById('sync-cron').classList.toggle('hidden', this.value !== 'cron')" class="select select-sm select-bordered w-full rounded-xl bg-base-100">
+            {% for n in sync_intervals %}
+            <option value="{{ n }}" {% if not cron_mode and n == (sync.interval or 4) %}selected{% endif %}>{% if n == 24 %}Once a day (midnight){% elif n == 1 %}Every hour{% else %}Every {{ n }} hours{% endif %}</option>
+            {% endfor %}
+            <option value="cron" {% if cron_mode %}selected{% endif %}>Custom (cron)…</option>
+          </select>
+          {% if not sync.interval and not cron_mode %}<span class="block text-[0.6875rem] text-amber-600 mt-1">Now set by SYNC_SCHEDULE_HOURS ({{ sync.hours | join(", ") }}); saving replaces it.</span>{% endif %}
+        </label>
+        <label class="block">
+          <span class="block text-xs font-semibold text-base-content/70 mb-1">Time zone</span>
+          <select name="timezone" class="select select-sm select-bordered w-full rounded-xl bg-base-100">
+            {% for tz in sync_timezones %}
+            <option value="{{ tz }}" {% if tz == sync.timezone %}selected{% endif %}>{{ tz.replace("_", " ") }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <div id="sync-cron" class="space-y-2 {% if not cron_mode %}hidden{% endif %}">
+        <label class="block">
+          <span class="block text-xs font-semibold text-base-content/70 mb-1">Cron expression</span>
+          <input type="text" name="cron" value="{{ cron_draft or sync.cron_text }}" placeholder="0 4-8 * * *" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="120"
+            hx-get="/settings/sync/preview" hx-trigger="input changed delay:400ms, change from:select[name=timezone]" hx-include="select[name=timezone]" hx-target="#sync-cron-preview"
+            class="input input-sm input-bordered w-full rounded-xl bg-base-100 font-mono">
+        </label>
+        <div id="sync-cron-preview">{% include "components/sync_cron_preview.html" %}</div>
+        <p class="text-[0.6875rem] text-base-content/50 leading-relaxed">Five fields: minute, hour, day of month, month, day of week, in the chosen time zone. <span class="font-mono">0 4-8 * * *</span> syncs at 4, 5, 6, 7 and 8 AM every day; <span class="font-mono">30 6 * * mon-fri</span> at 6:30 AM on weekdays. At most 24 times a day. When clocks spring forward, a skipped time runs an hour later; when they fall back, a repeated time runs once.</p>
+      </div>
+      {% if sync.error %}<p class="text-xs font-medium text-amber-600">{{ sync.error }} Automatic sync is paused until it's fixed.</p>{% endif %}
+      <p class="text-xs text-base-content/60">Next sync: <span class="font-semibold text-base-content">{% if sync_next %}{{ sync_next | fulldate }} {{ sync_next | clock }}{% elif sync.runs %}starting…{% elif sync.error %}paused{% else %}off{% endif %}</span></p>
+      <div class="rounded-xl border border-base-300 divide-y divide-base-200">
+        {% for conn in connections %}
+        <div class="px-3.5 py-2.5 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="text-base-content/40 flex-shrink-0">{{ icon("bank", "w-4 h-4") }}</span>
+            <div class="min-w-0">
+              <div class="text-sm font-semibold truncate">{{ conn.institution_name }}</div>
+              <div class="text-[0.6875rem] text-base-content/50">Last synced {% if conn.last_synced_at %}{{ conn.last_synced_at | fulldate }} {{ conn.last_synced_at | clock }}{% else %}never{% endif %}</div>
+            </div>
+          </div>
+          {% if conn.status.value == "active" %}
+          <span class="flex-shrink-0 text-[0.6875rem] font-semibold text-emerald-700 bg-emerald-50 rounded-full px-2 py-0.5">Active</span>
+          {% else %}
+          <span class="flex-shrink-0 text-[0.6875rem] font-semibold text-rose-700 bg-rose-50 rounded-full px-2 py-0.5">{{ conn.status.value | replace("_", " ") | capitalize }}</span>
+          {% endif %}
+        </div>
+        {% else %}
+        <p class="px-3.5 py-3 text-xs text-base-content/60">No bank connected yet.</p>
+        {% endfor %}
+      </div>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <a href="/accounts" class="text-xs font-semibold text-emerald-600 hover:underline">{% if connections %}Manage bank connections on Accounts ›{% else %}Connect a bank on Accounts ›{% endif %}</a>
+        <button type="submit" class="max-lg:w-full max-lg:py-3 max-lg:text-base px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors">Save</button>
+      </div>
+    </form>
+
+    <!-- Notifications: kash.js shows the one state that applies to this device -->
+    {% set push_primary = "max-lg:py-3 max-lg:text-base px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50" %}
+    {% set push_secondary = "max-lg:py-3 max-lg:text-base px-4 py-2 border border-base-300 hover:bg-base-200 text-sm font-semibold rounded-xl transition-colors disabled:opacity-50" %}
+    <div id="notifications" data-push-card data-push-key="{{ push_public_key }}" class="{{ shown('notifications') }} scroll-mt-4 md:scroll-mt-24 kash-card bg-base-100 border border-base-300 shadow-sm rounded-2xl p-5 md:p-6 space-y-4">
+      {% call section_head("bell", "bg-rose-50 text-rose-600", "Notifications") %}Alerts on your phone or computer. They name a bill or account but never show an amount.{% endcall %}
+
+      <p data-push-state="checking" class="text-sm text-base-content/60">Checking this device…</p>
+
+      <p data-push-state="https" class="hidden text-sm text-base-content/70">Notifications need a secure connection. Open Kash at its <span class="font-semibold">https://</span> address to turn them on.</p>
+
+      <p data-push-state="install" class="hidden text-sm text-base-content/70">On iPhone and iPad, notifications only work from the Home Screen (iOS 16.4 or later). In Safari tap Share, then <span class="font-semibold">Add to Home Screen</span>, and open Kash from there.</p>
+
+      <p data-push-state="unsupported" class="hidden text-sm text-base-content/70">This browser doesn't support notifications.</p>
+
+      <p data-push-state="denied" class="hidden text-sm text-base-content/70">Notifications are blocked for Kash on this device. Allow them in your browser or phone settings, then come back here.</p>
+
+      <div data-push-state="unreadable" class="hidden space-y-3">
+        <p class="text-sm text-rose-600">Notifications stopped because the app's encryption key changed. If you changed it on purpose, reset them and turn them on again on each device.{% if not request.state.is_owner %} Only {{ owner_name }} can do this.{% endif %}</p>
+        {% if request.state.is_owner %}
+        <form method="post" action="/notifications/reset">
+          <button type="submit" class="{{ push_secondary }}">Reset notifications</button>
+        </form>
+        {% endif %}
+      </div>
+
+      <div data-push-state="off" class="hidden space-y-3">
+        <p class="text-sm text-base-content/70">Notifications are off on this device.</p>
+        <button type="button" data-push-action="on" class="{{ push_primary }}">Turn on</button>
+      </div>
+
+      <div data-push-state="on" class="hidden space-y-3">
+        <p class="text-sm text-base-content/70">Notifications are on for this device.</p>
+        <div class="flex flex-wrap gap-3">
+          <button type="button" data-push-action="test" class="{{ push_primary }}">Send a test</button>
+          <button type="button" data-push-action="off" class="{{ push_secondary }}">Turn off</button>
+        </div>
+      </div>
+
+      {# What to alert about, for this person on all their devices #}
+      {% macro alert_row(name, title, hint, on) -%}
+      <div class="space-y-2">
+        <label class="flex items-start gap-3 cursor-pointer">
+          <input type="checkbox" name="{{ name }}" value="1" class="toggle toggle-sm toggle-success flex-shrink-0 mt-0.5" {% if on %}checked{% endif %} />
+          <span class="min-w-0">
+            <span class="block text-sm font-semibold">{{ title }}</span>
+            <span class="block text-[0.6875rem] text-base-content/50">{{ hint }}</span>
+          </span>
+        </label>
+        {% if caller %}{{ caller() }}{% endif %}
+      </div>
+      {%- endmacro %}
+      <form method="post" action="/settings/notifications" class="pt-5 border-t border-base-200 space-y-5">
+        <div>
+          <h4 class="text-sm font-bold">What to send you</h4>
+          <p class="text-[0.6875rem] text-base-content/50">Just for you, on all your devices.</p>
+        </div>
+
+        <label class="block">
+          <span class="block text-xs font-semibold text-base-content/70 mb-1">Daily alerts arrive around</span>
+          <select name="hour" class="select select-sm select-bordered w-full rounded-xl bg-base-100">
+            {% for value, label in alert_hours %}
+            <option value="{{ value }}" {% if value == alerts.hour %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <span class="block text-[0.6875rem] text-base-content/50 mt-1">In {{ sync.timezone.replace("_", " ") }}, the time zone set under Bank sync. Bills, categories and budgets go out then; sync problems come when they happen.</span>
+        </label>
+
+        {% call alert_row("bill_overdue", "Bill overdue", "A payment can take a few days to post, so a short wait may alert you about a bill that's on its way.", alerts.bill_overdue) %}
+        <select name="overdue_days" aria-label="Days overdue" class="select select-sm select-bordered w-full rounded-xl bg-base-100">
+          {% for days in alert_overdue_days %}
+          <option value="{{ days }}" {% if days == alerts.overdue_days %}selected{% endif %}>{{ days }} day{{ "s" if days != 1 }} after the due date</option>
+          {% endfor %}
+        </select>
+        {% endcall %}
+
+        {% call alert_row("bill_due", "Bill due soon", "A reminder before a bill's due date.", alerts.bill_due) %}
+        <select name="due_days" aria-label="Days before due" class="select select-sm select-bordered w-full rounded-xl bg-base-100">
+          {% for days in alert_due_days %}
+          <option value="{{ days }}" {% if days == alerts.due_days %}selected{% endif %}>{{ days }} day{{ "s" if days != 1 }} before</option>
+          {% endfor %}
+        </select>
+        {% endcall %}
+
+        {% call alert_row("budget", "Budget exceeded", "Once a month per category.", alerts.budget) %}
+        <select name="budget_percent" aria-label="Budget level" class="select select-sm select-bordered w-full rounded-xl bg-base-100">
+          {% for percent in alert_percents %}
+          <option value="{{ percent }}" {% if percent == alerts.budget_percent %}selected{% endif %}>{{ "Over budget" if percent == 100 else "At " ~ percent ~ "% of the budget" }}</option>
+          {% endfor %}
+        </select>
+        {% endcall %}
+
+        {{ alert_row("needs_category", "Transactions need a category", "When new ones are waiting for a category.", alerts.needs_category) }}
+        {{ alert_row("sync", "Bank sync problems", "A bank needs reconnecting, keeps failing, or has stopped updating.", alerts.sync) }}
+
+        {% call alert_row("large_tx", "Large transaction", "Money out once it posts, which can take a few days. Quiet from 10 PM to 7 AM.", alerts.large_tx) %}
+        <label class="block">
+          <span class="block text-xs font-semibold text-base-content/70 mb-1">At or above ({{ current.currency }})</span>
+          <input type="number" name="large_amount" value="{{ alerts.large_amount }}" min="0.01" step="any" inputmode="decimal" required class="input input-sm input-bordered w-full rounded-xl bg-base-100" />
+        </label>
+        {% endcall %}
+
+        {% call alert_row("low_balance", "Low balance", "When an account drops below its limit, and again if it recovers and drops. Quiet from 10 PM to 7 AM.", alerts.low_balance) %}
+        {% for account in alert_accounts %}
+        <label class="block">
+          <span class="block text-xs font-semibold text-base-content/70 mb-1 truncate">{{ account.name }}</span>
+          <input type="number" name="limit_{{ account.id }}" value="{{ alerts.balance_limits.get(account.id | string, '') }}" min="0.01" step="any" inputmode="decimal" placeholder="No limit" class="input input-sm input-bordered w-full rounded-xl bg-base-100" />
+        </label>
+        {% else %}
+        <p class="text-[0.6875rem] text-base-content/50">Add a checking, savings or cash account to set a limit.</p>
+        {% endfor %}
+        {% endcall %}
+
+        <button type="submit" class="{{ push_primary }}">Save alerts</button>
+      </form>
+    </div>
+
+    <!-- AI categorization (optional) -->
+    <form id="ai" method="post" action="/settings/ai" class="{{ shown('ai') }} scroll-mt-4 md:scroll-mt-24 kash-card bg-base-100 border border-base-300 shadow-sm rounded-2xl p-5 md:p-6 space-y-4">
+      {% call section_head("sparkles", "bg-emerald-50 text-emerald-600", "AI categorization") %}<span class="font-semibold text-base-content/50">Optional.</span> Categorizes transactions your rules can't, after each sync. Confident answers are applied (you can undo them); the rest stay uncategorized. Kash works the same with this off.{% if ai.ai_enabled %} <a href="/ai/review" class="font-semibold text-emerald-600 hover:underline">AI activity ›</a>{% endif %}{% endcall %}
+      <label class="flex items-center gap-2 text-sm font-semibold cursor-pointer">
+        <input type="checkbox" name="enabled" value="1" class="toggle toggle-sm toggle-success" {% if ai.ai_enabled %}checked{% endif %} />
+        Use AI categorization
+      </label>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <label class="block">
+          <span class="block text-xs font-semibold text-base-content/70 mb-1">Provider</span>
+          <select id="ai_provider" name="ai_provider" class="select select-sm select-bordered w-full rounded-xl bg-base-100" onchange="kashAiProvider(this)">
+            {% for key, preset in ai_presets.items() %}
+            <option value="{{ key }}" data-url="{{ preset.base_url }}" data-custom="{{ '1' if preset.custom_url }}" data-key="{{ '1' if preset.needs_key }}" data-hint="{{ preset.model_hint }}" {% if key == ai_provider %}selected{% endif %}>{{ preset.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="block">
+          <span class="block text-xs font-semibold text-base-content/70 mb-1">Model</span>
+          <input id="ai_model" type="text" name="model" value="{{ ai.ai_model or '' }}" list="ai-model-list" autocomplete="off" placeholder="{{ ai_presets[ai_provider].model_hint }}" class="input input-sm input-bordered w-full rounded-xl bg-base-100" />
+          <datalist id="ai-model-list"></datalist>
+        </label>
+        <label id="ai_url_field" class="block md:col-span-2 {% if not ai_presets[ai_provider].custom_url %}hidden{% endif %}">
+          <span class="block text-xs font-semibold text-base-content/70 mb-1">Server address</span>
+          <input id="ai_base_url" type="url" name="base_url" value="{{ ai_base_url }}" placeholder="http://192.168.1.20:11434/v1" class="input input-sm input-bordered w-full rounded-xl bg-base-100" />
+          {% if ai_http_warning %}<span class="block text-[0.6875rem] text-amber-600 mt-1">This address uses plain http to a public server: the key and data would travel unencrypted.</span>{% endif %}
+        </label>
+        <label id="ai_key_field" class="block md:col-span-2">
+          <span class="block text-xs font-semibold text-base-content/70 mb-1">API key <span id="ai_key_optional" class="font-normal text-base-content/50 {% if ai_presets[ai_provider].needs_key %}hidden{% endif %}">(if your server needs one)</span></span>
+          <input type="password" name="api_key" autocomplete="off" placeholder="{% if ai_key_hint %}Saved {{ ai_key_hint }} (leave empty to keep){% else %}Paste your API key{% endif %}" class="input input-sm input-bordered w-full rounded-xl bg-base-100" />
+          {% if ai_key_unreadable %}<span class="block text-[0.6875rem] text-rose-600 mt-1">The saved key can't be read anymore (the encryption key changed). Enter it again.</span>{% endif %}
+        </label>
+        <label class="block md:col-span-2">
+          <span class="block text-xs font-semibold text-base-content/70 mb-1">Categorize automatically when the AI is at least</span>
+          <select name="threshold" class="select select-sm select-bordered w-full rounded-xl bg-base-100">
+            {% for value, label in ai_threshold_choices %}
+            <option value="{{ value }}" {% if value == ai_threshold %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <span class="block text-[0.6875rem] text-base-content/50 mt-1">Answers below this leave the transaction uncategorized, like before. AI-categorized transactions get an AI badge and can be undone.</span>
+        </label>
+      </div>
+      <label class="flex items-start gap-2 text-sm cursor-pointer">
+        <input type="checkbox" name="after_sync" value="1" class="checkbox checkbox-sm checkbox-success mt-0.5" {% if ai.ai_run_after_sync %}checked{% endif %} />
+        <span><span class="font-semibold">Categorize new transactions after each bank sync</span>
+          <span class="block text-[0.6875rem] text-base-content/50">Off: only when you press "Categorize now" on the AI page.</span></span>
+      </label>
+
+      <details id="ai-advanced" class="rounded-xl border border-base-300 px-4 py-2" {% if ai_opts.system_prompt or ai_opts.max_tokens or ai_opts.temperature or ai_opts.batch_size != 25 or not ai_opts.send_examples %}open{% endif %}>
+        <summary class="cursor-pointer text-sm font-semibold select-none py-1">Advanced</summary>
+        <div class="space-y-4 pt-2 pb-2">
+          <label class="block">
+            <span class="flex items-center justify-between text-xs font-semibold text-base-content/70 mb-1">
+              <span>Instructions for the AI (system prompt)</span>
+              <button type="button" class="text-[0.6875rem] font-semibold text-emerald-600 hover:underline" onclick="document.getElementById('ai_prompt').value = document.getElementById('ai_prompt').dataset.default">Use the built-in prompt</button>
+            </span>
+            <textarea id="ai_prompt" name="system_prompt" rows="9" maxlength="8000" data-default="{{ ai_default_prompt }}" class="textarea textarea-bordered w-full rounded-xl bg-base-100 text-xs leading-snug font-mono">{{ ai_prompt }}</textarea>
+            <span class="block text-[0.6875rem] text-base-content/50 mt-1">Kash always adds the answer format after these instructions, so answers can be read: <span class="font-mono">{{ ai_output_format.splitlines()[1] }}</span></span>
+          </label>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <label class="block">
+              <span class="block text-xs font-semibold text-base-content/70 mb-1">Temperature</span>
+              <input type="number" name="temperature" min="0" max="1" step="0.1" value="{{ ai_opts.temperature }}" class="input input-sm input-bordered w-full rounded-xl bg-base-100" />
+              <span class="block text-[0.6875rem] text-base-content/50 mt-1">0 = most consistent (recommended).</span>
+            </label>
+            <label class="block">
+              <span class="block text-xs font-semibold text-base-content/70 mb-1">Maximum output tokens</span>
+              <input type="number" name="max_tokens" min="{{ ai_tokens_range[0] }}" max="{{ ai_tokens_range[1] }}" step="1" value="{{ ai_opts.max_tokens or '' }}" placeholder="Automatic" class="input input-sm input-bordered w-full rounded-xl bg-base-100" />
+              <span class="block text-[0.6875rem] text-base-content/50 mt-1">Empty = sized to each request.</span>
+            </label>
+            <label class="block">
+              <span class="block text-xs font-semibold text-base-content/70 mb-1">Merchants per request</span>
+              <select name="batch_size" class="select select-sm select-bordered w-full rounded-xl bg-base-100">
+                {% for size in ai_batch_sizes %}<option value="{{ size }}" {% if size == ai_opts.batch_size %}selected{% endif %}>{{ size }}{% if size == 25 %} (default){% endif %}</option>{% endfor %}
+              </select>
+              <span class="block text-[0.6875rem] text-base-content/50 mt-1">Lower it for small local models.</span>
+            </label>
+          </div>
+          <label class="flex items-start gap-2 text-sm cursor-pointer">
+            <input type="checkbox" name="send_examples" value="1" class="checkbox checkbox-sm checkbox-success mt-0.5" {% if ai_opts.send_examples %}checked{% endif %} />
+            <span><span class="font-semibold">Include examples from my history</span>
+              <span class="block text-[0.6875rem] text-base-content/50">Up to 30 "merchant → category" pairs from your categorized transactions. Improves answers; turn off to send less.</span></span>
+          </label>
+        </div>
+      </details>
+      <details id="ai-what-is-sent" class="text-xs text-base-content/60">
+        <summary class="cursor-pointer font-semibold text-emerald-700 hover:text-emerald-800 select-none">What Kash sends to the provider</summary>
+        <ul class="mt-2 ml-4 list-disc space-y-0.5">
+          <li>Only transactions your rules left uncategorized (never transfers, pending or ignored ones).</li>
+          <li>For each: description and merchant (long numbers removed), money in/out, rounded amount, account type, month.</li>
+          <li>Your category names, and a few of your own "merchant → category" examples.</li>
+          <li>Never: your name or email, account names or numbers, balances, notes, or person-to-person payments (Zelle, Venmo, …).</li>
+          <li>Ollama keeps everything on your own server.</li>
+        </ul>
+      </details>
+      <div id="ai-test-result"></div>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        {% if ai.ai_api_key_encrypted %}
+        <button type="submit" form="ai-key-remove" class="text-xs font-semibold text-rose-600 hover:underline">Remove saved API key</button>
+        {% else %}<span></span>{% endif %}
+        <div class="flex items-center gap-2 max-lg:w-full">
+          <button type="button" hx-post="/settings/ai/test" hx-include="closest form" hx-target="#ai-test-result" hx-indicator="#ai-test-spinner"
+            class="max-lg:flex-1 max-lg:py-3 max-lg:text-base whitespace-nowrap px-4 py-2 border border-base-300 hover:bg-base-200 text-sm font-semibold rounded-xl transition-colors">
+            Test connection <span id="ai-test-spinner" class="htmx-indicator">…</span>
+          </button>
+          <button type="submit" class="max-lg:flex-1 max-lg:py-3 max-lg:text-base px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors">Save</button>
+        </div>
+      </div>
+    </form>
+    <form id="ai-key-remove" method="post" action="/settings/ai/key/remove" class="hidden"></form>
+    <script>
+      function kashAiProvider(select) {
+        const opt = select.selectedOptions[0];
+        const custom = opt.dataset.custom === "1";
+        document.getElementById("ai_url_field").classList.toggle("hidden", !custom);
+        document.getElementById("ai_key_optional").classList.toggle("hidden", opt.dataset.key === "1");
+        // Replace an empty field or another provider's default; keep an address you typed.
+        const url = document.getElementById("ai_base_url");
+        const defaults = [...select.options].map((o) => o.dataset.url);
+        if (!custom) url.value = "";
+        else if (!url.value || defaults.includes(url.value)) url.value = opt.dataset.url;
+        document.getElementById("ai_model").placeholder = opt.dataset.hint;
+        document.getElementById("ai-test-result").innerHTML = "";
+      }
+    </script>
+
+    <!-- People: everyone who can log in to this household -->
+    <div id="people" class="{{ shown('people') }} scroll-mt-4 md:scroll-mt-24 kash-card bg-base-100 border border-base-300 shadow-sm rounded-2xl p-5 md:p-6 space-y-4">
+      {% call section_head("users", "bg-purple-50 text-purple-600", "People") %}Everyone here sees and edits the same accounts, budgets and settings, each with their own login.{% if not request.state.is_owner %} Only {{ owner_name }} can add or remove people.{% endif %}{% endcall %}
+
+      {% if new_link %}
+      <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-2">
+        <p class="text-sm font-semibold text-emerald-800">{% if new_link.joined %}Password link for {{ new_link.person.display_name or new_link.person.email }}{% else %}Invite link for {{ new_link.person.display_name or new_link.person.email }}{% endif %}</p>
+        <div class="flex gap-2">
+          <input id="new-link" type="text" readonly value="{{ new_link.url }}" class="input input-sm input-bordered w-full rounded-xl bg-base-100 font-mono text-xs" onfocus="this.select()" />
+          <button type="button" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl flex-shrink-0" onclick="kashCopyLink(this)">Copy</button>
+        </div>
+        <p class="text-[0.6875rem] text-emerald-700">Send it to them by text or email. It works once and for {{ invite_days }} days; {% if new_link.joined %}they choose a new password with it.{% else %}they choose their own password with it.{% endif %} Kash shows it only now: if it gets lost, make a new one.</p>
+      </div>
+      {% endif %}
+
+      <div class="rounded-xl border border-base-300 divide-y divide-base-200">
+        {% for person in people %}
+        {% set joined = has_account(person.hashed_password) %}
+        <div class="px-3.5 py-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs flex-shrink-0">{{ ((person.display_name or person.email)[:1]) | upper }}</div>
+            <div class="min-w-0">
+              <div class="text-sm font-semibold truncate">{{ person.display_name or person.email }}{% if person.id == request.state.user_id %} <span class="text-xs font-normal text-base-content/50">(you)</span>{% endif %}</div>
+              <div class="text-[0.6875rem] text-base-content/50 truncate">{{ person.email }}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            {% if person.id == owner_id %}
+            <span class="text-[0.6875rem] font-semibold text-purple-700 bg-purple-50 rounded-full px-2 py-0.5">Owner</span>
+            {% elif not joined and invite_expired(person.invite_expires_at) %}
+            <span class="text-[0.6875rem] font-semibold text-rose-700 bg-rose-50 rounded-full px-2 py-0.5">Invite expired</span>
+            {% elif not joined %}
+            <span class="text-[0.6875rem] font-semibold text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">Invited · until {{ person.invite_expires_at | day }}</span>
+            {% endif %}
+            {% if request.state.is_owner and person.id != owner_id %}
+            <form method="post" action="/settings/people/{{ person.id }}/link">
+              <button type="submit" class="text-xs font-semibold text-emerald-600 hover:underline" title="{% if joined %}A link to set a new password, if they forgot it{% else %}A new invite link; the old one stops working{% endif %}">{% if joined %}Password link{% else %}New link{% endif %}</button>
+            </form>
+            <form method="post" action="/settings/people/{{ person.id }}/remove" hx-confirm="{{ 'Remove ' ~ (person.display_name or person.email) ~ '? They can no longer log in. The household’s data stays as it is.' }}">
+              <button type="submit" class="text-xs font-semibold text-rose-600 hover:underline">Remove</button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      {% if request.state.is_owner %}
+      {% if can_add_people %}
+      <form method="post" action="/settings/people" class="space-y-3">
+        <h4 class="text-sm font-bold">Invite someone</h4>
+        <div class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 sm:items-end">
+          <label class="block">
+            <span class="block text-xs font-semibold text-base-content/70 mb-1">Name</span>
+            <input type="text" name="name" maxlength="100" autocomplete="off" class="input input-sm input-bordered w-full rounded-xl bg-base-100" />
+          </label>
+          <label class="block">
+            <span class="block text-xs font-semibold text-base-content/70 mb-1">Email (their login)</span>
+            <input type="email" name="email" required autocomplete="off" class="input input-sm input-bordered w-full rounded-xl bg-base-100" />
+          </label>
+          <button type="submit" class="max-lg:py-3 max-lg:text-base px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors">Make invite link</button>
+        </div>
+        <p class="text-[0.6875rem] text-base-content/50">Kash doesn't send email: you get a link to send them yourself.</p>
+      </form>
+      {% else %}
+      <p class="text-xs text-base-content/60">This household has the most people Kash allows.</p>
+      {% endif %}
+      {% endif %}
+    </div>
+    <script>
+      function kashCopyLink(button) {
+        const input = document.getElementById("new-link");
+        input.select();
+        const done = () => { button.textContent = "Copied"; setTimeout(() => (button.textContent = "Copy"), 2000); };
+        if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(input.value).then(done, () => document.execCommand("copy") && done());
+        else if (document.execCommand("copy")) done();
+      }
+    </script>
+
+    <!-- Data & backup -->
+    <div id="data" class="{{ shown('data') }} scroll-mt-4 md:scroll-mt-24 kash-card bg-base-100 border border-base-300 shadow-sm rounded-2xl p-5 md:p-6 space-y-4">
+      {{ section_head("database", "bg-slate-100 text-slate-600", "Data & backup", "Download your data any time. Files are made on the spot from what's in Kash now.") }}
+      <div class="rounded-xl border border-base-300 divide-y divide-base-200 overflow-hidden">
+        <a href="/transactions/export.csv" hx-boost="false" class="px-3.5 py-3 flex items-center justify-between gap-3 hover:bg-base-200/60 transition-colors">
+          <div class="flex items-center gap-3 min-w-0">
+            {{ tile("receipt", "bg-emerald-50 text-emerald-600") }}
+            <div class="min-w-0">
+              <div class="text-sm font-bold leading-snug">Transactions <span class="text-xs font-semibold text-base-content/40">CSV</span></div>
+              <div class="text-xs text-base-content/50">Every transaction, for a spreadsheet</div>
+            </div>
+          </div>
+          <span class="text-base-content/40 flex-shrink-0">{{ icon("download", "w-4 h-4") }}</span>
+        </a>
+        <a href="/rules/export" hx-boost="false" class="px-3.5 py-3 flex items-center justify-between gap-3 hover:bg-base-200/60 transition-colors">
+          <div class="flex items-center gap-3 min-w-0">
+            {{ tile("rules", "bg-purple-50 text-purple-600") }}
+            <div class="min-w-0">
+              <div class="text-sm font-bold leading-snug">Rules <span class="text-xs font-semibold text-base-content/40">JSON</span></div>
+              <div class="text-xs text-base-content/50">Your categorization rules</div>
+            </div>
+          </div>
+          <span class="text-base-content/40 flex-shrink-0">{{ icon("download", "w-4 h-4") }}</span>
+        </a>
+        <div class="px-3.5 py-3 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            {{ tile("package", "bg-slate-100 text-slate-500") }}
+            <div class="min-w-0">
+              <div class="text-sm font-bold leading-snug text-base-content/70">Full backup &amp; restore</div>
+              <div class="text-xs text-base-content/50">Planned. For now, back up the database (the data folder or the Postgres volume) and keep your <span class="font-mono">.env</span> with <span class="font-mono">DATA_ENCRYPTION_KEY</span>.</div>
+            </div>
+          </div>
+          <span class="flex-shrink-0 text-[0.6875rem] font-semibold text-base-content/50 bg-base-200 rounded-full px-2 py-0.5">Soon</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  </div>
+
+</div>
+<script>
+  // Highlight the section you're looking at in the desktop menu. Runs again whenever the page
+  // is swapped in (hx-boost): the previous copy's listeners are removed first.
+  (function () {
+    if (window.kashSettingsSpy) window.kashSettingsSpy.abort();
+    const links = [...document.querySelectorAll("[data-settings-link]")];
+    const sections = links.map((a) => document.getElementById(a.dataset.settingsLink)).filter(Boolean);
+    if (!sections.length) return;
+    const stop = new AbortController();
+    window.kashSettingsSpy = stop;
+    let pinnedUntil = 0;  // a clicked section stays marked, even if the page can't scroll it to the top
+    const mark = (id) => links.forEach((a) => a.classList.toggle("bg-base-200", a.dataset.settingsLink === id));
+    links.forEach((a) => a.addEventListener("click", () => { pinnedUntil = Date.now() + 500; mark(a.dataset.settingsLink); }));
+    function update() {
+      if (!document.body.contains(sections[0])) return stop.abort();  // left Settings
+      if (Date.now() < pinnedUntil) return;
+      const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+      let current = sections[0];
+      for (const el of sections) if (el.getBoundingClientRect().top <= 120) current = el;
+      if (atBottom) current = sections[sections.length - 1];
+      mark(current.id);
+    }
+    window.addEventListener("scroll", update, { passive: true, signal: stop.signal });
+    window.addEventListener("hashchange", update, { signal: stop.signal });
+    const linked = links.find((a) => "#" + a.dataset.settingsLink === location.hash);
+    if (linked) { pinnedUntil = Date.now() + 500; mark(linked.dataset.settingsLink); } else update();
+  })();
+</script>
+{% endblock %}

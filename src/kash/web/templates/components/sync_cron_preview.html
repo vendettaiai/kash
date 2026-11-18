@@ -1,0 +1,8 @@
+{% if cron_info and cron_info.error %}
+<p class="text-xs font-medium text-rose-600">{{ cron_info.error }}</p>
+{% elif cron_info %}
+<div class="rounded-xl bg-base-200/60 px-3 py-2 text-xs space-y-0.5">
+  <div class="font-semibold">{{ cron_info.description }}</div>
+  <div class="text-base-content/60">Next: {{ cron_info.runs | join(" · ") }}</div>
+</div>
+{% endif %}

@@ -1,0 +1,1467 @@
+{% extends "base.html" %}
+
+{% block title %}Rules - Kash{% endblock %}
+
+{% block content %}
+{# The open tab is in the address (?tab=), so a save or Back keeps it #}
+{% set tab = request.query_params.get("tab") %}
+{% if tab not in ("transfer", "recurring", "all") %}{% set tab = "categorization" %}{% endif %}
+{% macro tab_class(name) -%}
+px-2.5 md:px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 md:gap-2 shrink-0 whitespace-nowrap {% if tab == name %}bg-emerald-600 text-white shadow-xs{% else %}bg-white text-slate-600 hover:text-slate-900 border border-slate-200{% endif %}
+{%- endmacro %}
+{% macro badge_class(name) -%}
+px-2 py-0.5 rounded-full text-[0.6875rem] font-bold {% if tab == name %}bg-emerald-700/60 text-emerald-100{% else %}bg-slate-100 text-slate-700{% endif %}
+{%- endmacro %}
+<div class="space-y-6 max-w-5xl mx-auto pb-12" id="rules-container">
+
+
+  <!-- Top Page Header matching Transactions/Accounts -->
+  <div class="flex items-start justify-between gap-3 md:flex-col md:items-stretch lg:flex-row lg:items-center pt-1 pb-1">
+    <div class="min-w-0">
+      <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Rules</h2>
+      <p class="text-xs text-slate-400 mt-0.5">Automate categorization, transfer matching, and recurring bill detection</p>
+    </div>
+
+    <!-- Header Actions: phones get ⋯ (the others, in a sheet) and +, like Transactions -->
+    <div class="flex items-center gap-2 shrink-0 md:flex-wrap lg:justify-end">
+      <div class="hidden md:flex flex-wrap items-center lg:justify-end gap-2">
+        <a href="/rules/export" hx-boost="false" class="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold rounded-xl shadow-xs transition-colors flex items-center gap-1.5" title="Export rules to JSON">
+          {{ icon("export", "w-3.5 h-3.5 text-slate-500") }}
+          <span>Export</span>
+        </a>
+        <button type="button" onclick="document.getElementById('import_rules_modal').showModal()" class="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold rounded-xl shadow-xs transition-colors flex items-center gap-1.5" title="Import rules from JSON">
+          {{ icon("import", "w-3.5 h-3.5 text-slate-500") }}
+          <span>Import</span>
+        </button>
+        <button type="button" onclick="document.getElementById('rule_packs_modal').showModal()" class="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold rounded-xl shadow-xs transition-colors flex items-center gap-1.5">
+          {{ icon("package", "w-3.5 h-3.5 text-slate-500") }}
+          <span>Rule Packs</span>
+        </button>
+        <form action="/rules/apply-all" method="POST" class="inline">
+          <button type="submit" class="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold rounded-xl shadow-xs transition-colors flex items-center gap-1.5" title="Reapply all rules across transaction ledger">
+            {{ icon("refresh-cw", "w-3.5 h-3.5 text-slate-500") }}
+            <span>Reset and reapply</span>
+          </button>
+        </form>
+      </div>
+      <button type="button" onclick="document.getElementById('rule_actions_modal').showModal()" class="md:hidden w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" title="More" aria-label="Import, export and more">
+        {{ icon("more", "w-4 h-4") }}
+      </button>
+      <button type="button" onclick="document.getElementById('new_rule_modal').showModal()" class="md:hidden w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" title="New Rule" aria-label="New Rule">
+        {{ icon("plus", "w-4 h-4") }}
+      </button>
+      <button
+        type="button"
+        onclick="document.getElementById('new_rule_modal').showModal()"
+        class="hidden md:flex md:order-first lg:order-none px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors items-center gap-1.5"
+      >
+        {{ icon("plus", "w-3.5 h-3.5") }}
+        <span>New Rule</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Tab Switcher (Segmented Control) -->
+  <div class="kash-chip-row flex items-center gap-1.5 md:gap-2 border-b border-slate-200 pb-3 overflow-x-auto">
+    <button
+      type="button"
+      id="tab-btn-cat"
+      onclick="switchRuleTab('categorization')"
+      class="{{ tab_class('categorization') }}"
+    >
+      <span class="lg:hidden">Categorize</span><span class="hidden lg:inline">Categorization Rules</span>
+      <span id="tab-badge-cat" data-tab-count class="{{ badge_class('categorization') }}">
+        {{ categorization_rules|length }}
+      </span>
+    </button>
+
+    <button
+      type="button"
+      id="tab-btn-transfer"
+      onclick="switchRuleTab('transfer')"
+      class="{{ tab_class('transfer') }}"
+    >
+      <span class="lg:hidden">Transfers</span><span class="hidden lg:inline">Transfer Matching</span>
+      <span id="tab-badge-transfer" data-tab-count class="{{ badge_class('transfer') }}">
+        {{ transfer_rules|length }}
+      </span>
+    </button>
+
+    <button
+      type="button"
+      id="tab-btn-recurring"
+      onclick="switchRuleTab('recurring')"
+      class="{{ tab_class('recurring') }}"
+    >
+      <span class="lg:hidden">Recurring</span><span class="hidden lg:inline">Recurring Matching</span>
+      <span id="tab-badge-recurring" data-tab-count class="{{ badge_class('recurring') }}">
+        {{ recurring_rules|length }}
+      </span>
+    </button>
+
+    <button
+      type="button"
+      id="tab-btn-all"
+      onclick="switchRuleTab('all')"
+      class="{{ tab_class('all') }} max-md:hidden"
+    >
+      <span class="lg:hidden">All</span><span class="hidden lg:inline">View All</span>
+    </button>
+  </div>
+
+
+  <!-- ========================================== -->
+  <!-- 1. CATEGORIZATION RULES SECTION             -->
+  <!-- ========================================== -->
+  <div id="section-categorization" class="rule-section space-y-4{% if tab not in ('categorization', 'all') %} hidden{% endif %}">
+    
+    <!-- Section Header Bar -->
+    <div class="flex items-center justify-between">
+      <div>
+        <h3 class="text-base font-bold text-slate-900">Categorization Rules</h3>
+        <p class="text-xs text-slate-500">Automatically assign categories, merchants, and tags based on description patterns. Click any rule to edit.</p>
+      </div>
+      <button
+        type="button"
+        onclick="document.getElementById('new_rule_modal').showModal()"
+        class="hidden md:flex px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-xl transition-colors items-center gap-1.5 shrink-0"
+      >
+        {{ icon("plus", "w-3.5 h-3.5") }}
+        <span>Add Rule</span>
+      </button>
+    </div>
+
+    <!-- Filter and Search Bar Card (Matches Transactions Page) -->
+    <div class="kash-card p-3.5 bg-white border border-slate-100 shadow-sm rounded-2xl">
+      <form action="/rules" method="get" class="grid grid-cols-3 lg:grid-cols-12 gap-2 lg:gap-3 items-center">
+        <!-- Search Input (Enter searches) -->
+        <div class="col-span-3 lg:col-span-5 relative">
+          <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+            {{ icon("search", "w-4 h-4") }}
+          </span>
+          <input
+            type="search"
+            id="rules-search-input"
+            name="q"
+            value="{{ current_q }}"
+            aria-label="Search rules"
+            placeholder="Search rules by pattern or description..."
+            class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+        </div>
+
+        <!-- Category Dropdown -->
+        <div class="lg:col-span-3">
+          <select
+            name="cat_id"
+            aria-label="Category"
+            onchange="this.form.requestSubmit()"
+            class="w-full px-2.5 md:px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          >
+            <option value="all" {% if current_cat_id == 'all' %}selected{% endif %}>Category</option>
+            {% for c in categories %}
+            <option value="{{ c.id }}" {% if current_cat_id == (c.id|string) %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Status Dropdown -->
+        <div class="lg:col-span-2">
+          <select
+            name="status"
+            aria-label="Status"
+            onchange="this.form.requestSubmit()"
+            class="w-full px-2.5 md:px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          >
+            <option value="all" {% if current_status == 'all' %}selected{% endif %}>Status</option>
+            <option value="active" {% if current_status == 'active' %}selected{% endif %}>Active</option>
+            <option value="inactive" {% if current_status == 'inactive' %}selected{% endif %}>Paused</option>
+          </select>
+        </div>
+
+        <!-- Sort Dropdown (the icon says it sorts) -->
+        <div class="lg:col-span-2 relative">
+          <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+            {{ icon("sort", "w-3.5 h-3.5") }}
+          </span>
+          <select
+            name="sort"
+            aria-label="Sort"
+            onchange="this.form.requestSubmit()"
+            class="w-full pl-7 pr-2.5 md:pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          >
+            <option value="priority" {% if current_sort == 'priority' %}selected{% endif %}>Priority</option>
+            <option value="name" {% if current_sort == 'name' %}selected{% endif %}>Name</option>
+            <option value="category" {% if current_sort == 'category' %}selected{% endif %}>Category</option>
+          </select>
+        </div>
+      </form>
+    </div>
+
+    <!-- Rule Items Card List -->
+    <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl overflow-hidden divide-y divide-slate-100">
+      {% if categorization_rules|length == 0 %}
+      <div class="py-12 text-center space-y-3">
+        <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+          {{ icon("rules", "w-6 h-6") }}
+        </div>
+        <p class="text-sm font-semibold text-slate-700">No categorization rules found</p>
+        <p class="text-xs text-slate-400">Try adjusting your search query or filters above.</p>
+        <button
+          onclick="document.getElementById('new_rule_modal').showModal()"
+          class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors"
+        >
+          Create First Rule
+        </button>
+      </div>
+      {% else %}
+      {% for rule in categorization_rules %}
+      {# Name and buttons on top, then what it matches (a regex as its alternatives, "+N more"
+         past 8) and what it does, all at full width. Priority: left column from md, last line
+         on phones. #}
+      <div
+        class="py-3.5 px-4 md:px-5 flex items-start gap-3 md:gap-4 hover:bg-slate-50/60 transition-colors cursor-pointer group select-none"
+        onclick="openEditRuleModal('{{ rule.id }}', {{ rule.name | tojson | forceescape }}, {{ rule.priority }}, '{{ rule.conditions_op }}', {{ rule.conditions_data | tojson | forceescape }}, {{ rule.actions_data | tojson | forceescape }})"
+        title="Click to edit rule"
+      >
+        <span class="hidden md:inline-flex self-center px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200/80 font-mono text-xs font-bold text-slate-700 shrink-0 group-hover:border-slate-300 transition-colors" title="Priority: lower numbers run first">
+          p:{{ rule.priority }}
+        </span>
+
+        <div class="min-w-0 flex-1 space-y-2">
+          <!-- Name, status and buttons -->
+          <div class="flex items-start gap-2">
+            <div class="min-w-0 flex-1 flex flex-wrap items-center gap-x-2 gap-y-1 pt-1.5">
+              <h4 class="min-w-0 font-bold text-sm text-slate-900 group-hover:text-emerald-700 transition-colors break-words">{{ rule.name }}</h4>
+              {% set ai_added = (rule.config or {}).get("ai_conditions") or [] %}
+              {% if ai_added or (rule.config or {}).get("origin") == "ai_suggested" %}<a href="/ai/review" onclick="event.stopPropagation()" class="flex-shrink-0 px-1.5 py-px rounded bg-emerald-50 text-emerald-700 text-[0.5625rem] font-bold" title="{% if ai_added %}{{ ai_added | length }} condition{{ 's' if ai_added | length != 1 }} added by AI after you approved {{ 'them' if ai_added | length != 1 else 'it' }}. Remove them on the AI activity page.{% else %}Rule created from an AI proposal.{% endif %}">AI</a>{% endif %}
+              {% if not rule.is_active %}
+                <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[0.625rem] font-semibold">
+                  Paused
+                </span>
+              {% endif %}
+            </div>
+
+            <div class="flex items-center gap-1 shrink-0 -mr-1.5 md:mr-0" onclick="event.stopPropagation()">
+              <button
+                type="button"
+                onclick="openEditRuleModal('{{ rule.id }}', {{ rule.name | tojson | forceescape }}, {{ rule.priority }}, '{{ rule.conditions_op }}', {{ rule.conditions_data | tojson | forceescape }}, {{ rule.actions_data | tojson | forceescape }})"
+                class="w-8 h-8 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors"
+                title="Edit rule"
+              >
+                {{ icon("pencil", "w-3.5 h-3.5") }}
+              </button>
+
+              <form action="/rules/{{ rule.id }}/toggle" method="POST" class="inline">
+                <button
+                  type="submit"
+                  class="w-8 h-8 rounded-xl transition-colors flex items-center justify-center {% if rule.is_active %}text-emerald-600 bg-emerald-50 hover:bg-emerald-100{% else %}text-slate-400 bg-slate-100 hover:text-slate-700{% endif %}"
+                  title="{% if rule.is_active %}Active (click to pause){% else %}Paused (click to activate){% endif %}"
+                >
+                  {{ icon("power", "w-4 h-4") }}
+                </button>
+              </form>
+
+              <form action="/rules/{{ rule.id }}/delete" method="POST" class="inline">
+                <button
+                  type="submit"
+                  onclick="return confirm({{ ('Delete categorization rule “' ~ rule.name ~ '”?') | tojson | forceescape }})"
+                  class="w-8 h-8 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors"
+                  title="Delete rule"
+                >
+                  {{ icon("trash-2", "w-4 h-4") }}
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- What it matches -->
+          <div class="space-y-1">
+            {% for line in rule.condition_summary %}
+            {% if not loop.first %}<div class="text-[0.625rem] font-bold uppercase tracking-wider text-slate-400">{{ rule.conditions_op }}</div>{% endif %}
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="text-[0.6875rem] font-medium text-slate-400">{{ line.label }}</span>
+              {% for value in line.values[:8] %}
+              {% if line.plain %}
+              <span class="px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200/80 text-slate-700 text-[0.6875rem] break-words">{{ value }}</span>
+              {% else %}
+              <code class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200/80 text-slate-800 text-[0.6875rem] font-mono break-all">{{ value }}</code>
+              {% endif %}
+              {% endfor %}
+              {% if line.values | length > 8 %}<span class="text-[0.6875rem] font-semibold text-slate-500">+{{ line.values | length - 8 }} more</span>{% endif %}
+            </div>
+            {% endfor %}
+          </div>
+
+          <!-- What it does (and, on phones, its priority) -->
+          <div class="flex flex-wrap items-center gap-1.5">
+            {% for action in rule.actions_data %}
+            {% if action.op == "set_category" and action.value and (action.value | string) in category_names %}
+            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+              {{ icon("arrow-right", "w-3 h-3 text-emerald-600") }}
+              <span>{{ category_names[action.value | string] }}</span>
+            </span>
+            {% elif action.op == "set_category" %}
+            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200" title="Edit the rule to pick a category">Category deleted</span>
+            {% elif action.op in ("set_description", "set_clean_description") and action.value %}
+            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 break-words">Renames to “{{ action.value }}”</span>
+            {% elif action.op in ("set_merchant", "set_payee") and action.value %}
+            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 break-words">Merchant “{{ action.value }}”</span>
+            {% elif action.op == "append_notes" %}
+            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">Adds a note</span>
+            {% elif action.op == "ignore" %}
+            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">Ignores the transaction</span>
+            {% endif %}
+            {% endfor %}
+            <span class="md:hidden ml-auto text-[0.6875rem] font-semibold text-slate-400" title="Lower numbers run first">Priority {{ rule.priority }}</span>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+
+
+  <!-- ========================================== -->
+  <!-- 2. TRANSFER MATCHING RULES SECTION         -->
+  <!-- ========================================== -->
+  <div id="section-transfer" class="rule-section space-y-4{% if tab not in ('transfer', 'all') %} hidden{% endif %}">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div>
+        <h3 class="text-base font-bold text-slate-900">Transfer rules</h3>
+        <p class="text-xs text-slate-500">How we decide that two records are one transfer between your accounts. Click any rule to edit.</p>
+      </div>
+
+      <button
+        type="button"
+        onclick="openMatchingModal('transfer')"
+        class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors shrink-0 flex items-center gap-1.5"
+      >
+        {{ icon("plus", "w-3.5 h-3.5") }}
+        <span>New Matching Rule</span>
+      </button>
+    </div>
+
+    <!-- Transfer Rules Card List -->
+    <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl overflow-hidden divide-y divide-slate-100">
+      {% if transfer_rules|length == 0 %}
+      <div class="py-10 text-center text-xs text-slate-400">
+        No transfer rules configured. Click above to add a rule to automatically link transfer records across your accounts.
+      </div>
+      {% else %}
+      {% for rule in transfer_rules %}
+      {# Phones: a grid of order | icon | name | actions, with badges and criteria on full-width lines below.
+         md and up: the wrappers stop being display:contents and the row is one flex line, as before. #}
+      <div
+        class="py-3.5 px-4 md:px-5 grid grid-cols-[auto_auto_1fr_auto] gap-x-3 gap-y-2.5 md:flex items-center justify-between md:gap-4 hover:bg-slate-50/60 transition-colors cursor-pointer group select-none"
+        onclick="openEditMatchingRuleModal('{{ rule.id }}', {{ rule.name | tojson | forceescape }}, '{{ rule.action_mode }}', {{ rule.config | tojson | forceescape }})"
+        title="Click to edit rule"
+      >
+        <!-- Reorder Chevrons, Icon & Details -->
+        <div class="contents md:flex items-center gap-3.5 min-w-0 flex-1">
+          <!-- Reorder & Sequence -->
+          <div class="flex flex-col items-center justify-center w-6 text-slate-400 select-none" onclick="event.stopPropagation()">
+            <span class="text-xs font-bold text-slate-700 leading-none">{{ loop.index }}</span>
+            <div class="flex items-center gap-0.5 mt-1">
+              <form action="/rules/{{ rule.id }}/reorder" method="POST" class="inline">
+                <input type="hidden" name="direction" value="up">
+                <button type="submit" class="hover:text-slate-900 text-slate-400 p-0.5" title="Move up">
+                  {{ icon("chevron-up", "w-3 h-3") }}
+                </button>
+              </form>
+              <form action="/rules/{{ rule.id }}/reorder" method="POST" class="inline">
+                <input type="hidden" name="direction" value="down">
+                <button type="submit" class="hover:text-slate-900 text-slate-400 p-0.5" title="Move down">
+                  {{ icon("chevron-down", "w-3 h-3") }}
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Squircle Icon -->
+          <div class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            {{ icon("arrow-left-right", "w-4 h-4") }}
+          </div>
+
+          <!-- Rule Details & Bullets -->
+          <div class="contents md:block md:space-y-1 min-w-0 flex-1">
+            <div class="contents md:flex items-center flex-wrap gap-2">
+              <h4 class="min-w-0 font-bold text-sm text-slate-900 group-hover:text-blue-700 transition-colors break-words line-clamp-3 md:line-clamp-none md:truncate">{{ rule.name }}</h4>
+
+              <div class="col-span-full flex flex-wrap items-center gap-2 md:contents">
+                {% if rule.action_mode == 'links' %}
+                  <span class="bg-emerald-50 text-emerald-700 border border-emerald-200/60 text-[0.625rem] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
+                    {{ icon("link", "w-3 h-3") }} Links Automatically
+                  </span>
+                {% else %}
+                  <span class="bg-amber-50 text-amber-700 border border-amber-200/60 text-[0.625rem] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
+                    {{ icon("sparkles", "w-3 h-3") }} Suggests Match
+                  </span>
+                {% endif %}
+
+                {% if not rule.is_active %}
+                  <span class="bg-slate-100 text-slate-500 text-[0.625rem] px-2 py-0.5 rounded-full font-medium">
+                    Paused
+                  </span>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Bullet criteria summary line -->
+            {% set bullets = rule.criteria_bullets %}
+            {% if bullets %}
+            <div class="col-span-full text-xs text-slate-500 flex items-center gap-2 flex-wrap">
+              {% for bullet in bullets %}
+                <span class="inline-flex items-center gap-1 bg-slate-50 border border-slate-200/80 px-2 py-0.5 rounded-md text-[0.6875rem] font-medium text-slate-600">
+                  • {{ bullet }}
+                </span>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Right Side: Edit, Power Toggle & Delete Action (on phones: top-right, on the name line) -->
+        <div class="col-start-4 row-start-1 flex items-center gap-1.5 shrink-0" onclick="event.stopPropagation()">
+          <button
+            type="button"
+            onclick="openEditMatchingRuleModal('{{ rule.id }}', {{ rule.name | tojson | forceescape }}, '{{ rule.action_mode }}', {{ rule.config | tojson | forceescape }})"
+            class="w-8 h-8 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors"
+            title="Edit rule"
+          >
+            {{ icon("pencil", "w-3.5 h-3.5") }}
+          </button>
+
+          <form action="/rules/{{ rule.id }}/toggle" method="POST" class="inline">
+            <button
+              type="submit"
+              class="w-8 h-8 rounded-xl transition-colors flex items-center justify-center {% if rule.is_active %}text-emerald-600 bg-emerald-50 hover:bg-emerald-100{% else %}text-slate-400 bg-slate-100 hover:text-slate-700{% endif %}"
+              title="{% if rule.is_active %}Active (click to pause){% else %}Paused (click to activate){% endif %}"
+            >
+              {{ icon("power", "w-4 h-4") }}
+            </button>
+          </form>
+
+          <form action="/rules/{{ rule.id }}/delete" method="POST" class="inline">
+            <button
+              type="submit"
+              onclick="return confirm({{ ('Delete transfer rule “' ~ rule.name ~ '”?') | tojson | forceescape }})"
+              class="w-8 h-8 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors"
+              title="Delete rule"
+            >
+              {{ icon("trash-2", "w-4 h-4") }}
+            </button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+
+
+  <!-- ========================================== -->
+  <!-- 3. RECURRING MATCHING RULES SECTION        -->
+  <!-- ========================================== -->
+  <div id="section-recurring" class="rule-section space-y-4{% if tab not in ('recurring', 'all') %} hidden{% endif %}">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div>
+        <h3 class="text-base font-bold text-slate-900">Recurring rules</h3>
+        <p class="text-xs text-slate-500">How we decide that a charge is the bill you were already expecting. Click any rule to edit.</p>
+      </div>
+
+      <button
+        type="button"
+        onclick="openMatchingModal('recurring')"
+        class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors shrink-0 flex items-center gap-1.5"
+      >
+        {{ icon("plus", "w-3.5 h-3.5") }}
+        <span>New Matching Rule</span>
+      </button>
+    </div>
+
+    <!-- Recurring Rules Card List -->
+    <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl overflow-hidden divide-y divide-slate-100">
+      {% if recurring_rules|length == 0 %}
+      <div class="py-10 text-center text-xs text-slate-400">
+        No recurring rules configured. Add a rule to link transaction charges with your scheduled bills.
+      </div>
+      {% else %}
+      {% for rule in recurring_rules %}
+      {# Same phone grid / desktop flex layout as the transfer rows above. #}
+      <div
+        class="py-3.5 px-4 md:px-5 grid grid-cols-[auto_auto_1fr_auto] gap-x-3 gap-y-2.5 md:flex items-center justify-between md:gap-4 hover:bg-slate-50/60 transition-colors cursor-pointer group select-none"
+        onclick="openEditMatchingRuleModal('{{ rule.id }}', {{ rule.name | tojson | forceescape }}, '{{ rule.action_mode }}', {{ rule.config | tojson | forceescape }})"
+        title="Click to edit rule"
+      >
+        <!-- Reorder Chevrons, Icon & Details -->
+        <div class="contents md:flex items-center gap-3.5 min-w-0 flex-1">
+          <!-- Reorder & Sequence -->
+          <div class="flex flex-col items-center justify-center w-6 text-slate-400 select-none" onclick="event.stopPropagation()">
+            <span class="text-xs font-bold text-slate-700 leading-none">{{ loop.index }}</span>
+            <div class="flex items-center gap-0.5 mt-1">
+              <form action="/rules/{{ rule.id }}/reorder" method="POST" class="inline">
+                <input type="hidden" name="direction" value="up">
+                <button type="submit" class="hover:text-slate-900 text-slate-400 p-0.5" title="Move up">
+                  {{ icon("chevron-up", "w-3 h-3") }}
+                </button>
+              </form>
+              <form action="/rules/{{ rule.id }}/reorder" method="POST" class="inline">
+                <input type="hidden" name="direction" value="down">
+                <button type="submit" class="hover:text-slate-900 text-slate-400 p-0.5" title="Move down">
+                  {{ icon("chevron-down", "w-3 h-3") }}
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Squircle Icon -->
+          <div class="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+            {{ icon("calendar", "w-4 h-4") }}
+          </div>
+
+          <!-- Rule Details & Bullets -->
+          <div class="contents md:block md:space-y-1 min-w-0 flex-1">
+            <div class="contents md:flex items-center flex-wrap gap-2">
+              <h4 class="min-w-0 font-bold text-sm text-slate-900 group-hover:text-purple-700 transition-colors break-words line-clamp-3 md:line-clamp-none md:truncate">{{ rule.name }}</h4>
+
+              <div class="col-span-full flex flex-wrap items-center gap-2 md:contents">
+                {% if rule.action_mode == 'links' %}
+                  <span class="bg-purple-50 text-purple-700 border border-purple-200/60 text-[0.625rem] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
+                    {{ icon("link", "w-3 h-3") }} Links Automatically
+                  </span>
+                {% else %}
+                  <span class="bg-amber-50 text-amber-700 border border-amber-200/60 text-[0.625rem] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
+                    {{ icon("sparkles", "w-3 h-3") }} Suggests Match
+                  </span>
+                {% endif %}
+
+                {% if not rule.is_active %}
+                  <span class="bg-slate-100 text-slate-500 text-[0.625rem] px-2 py-0.5 rounded-full font-medium">
+                    Paused
+                  </span>
+                {% endif %}
+              </div>
+            </div>
+
+            {% set bullets = rule.criteria_bullets %}
+            {% if bullets %}
+            <div class="col-span-full text-xs text-slate-500 flex items-center gap-2 flex-wrap">
+              {% for bullet in bullets %}
+                <span class="inline-flex items-center gap-1 bg-slate-50 border border-slate-200/80 px-2 py-0.5 rounded-md text-[0.6875rem] font-medium text-slate-600">
+                  • {{ bullet }}
+                </span>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Right Side: Edit, Power Toggle & Delete Action (on phones: top-right, on the name line) -->
+        <div class="col-start-4 row-start-1 flex items-center gap-1.5 shrink-0" onclick="event.stopPropagation()">
+          <button
+            type="button"
+            onclick="openEditMatchingRuleModal('{{ rule.id }}', {{ rule.name | tojson | forceescape }}, '{{ rule.action_mode }}', {{ rule.config | tojson | forceescape }})"
+            class="w-8 h-8 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors"
+            title="Edit rule"
+          >
+            {{ icon("pencil", "w-3.5 h-3.5") }}
+          </button>
+
+          <form action="/rules/{{ rule.id }}/toggle" method="POST" class="inline">
+            <button
+              type="submit"
+              class="w-8 h-8 rounded-xl transition-colors flex items-center justify-center {% if rule.is_active %}text-emerald-600 bg-emerald-50 hover:bg-emerald-100{% else %}text-slate-400 bg-slate-100 hover:text-slate-700{% endif %}"
+              title="{% if rule.is_active %}Active (click to pause){% else %}Paused (click to activate){% endif %}"
+            >
+              {{ icon("power", "w-4 h-4") }}
+            </button>
+          </form>
+
+          <form action="/rules/{{ rule.id }}/delete" method="POST" class="inline">
+            <button
+              type="submit"
+              onclick="return confirm({{ ('Delete recurring rule “' ~ rule.name ~ '”?') | tojson | forceescape }})"
+              class="w-8 h-8 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors"
+              title="Delete rule"
+            >
+              {{ icon("trash-2", "w-4 h-4") }}
+            </button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+
+<!-- =================================================================== -->
+<!-- SHEET (phones): the header's Import / Export / Rule packs / Reset    -->
+<!-- =================================================================== -->
+<dialog id="rule_actions_modal" class="modal">
+  <div class="modal-box rounded-2xl bg-white border border-slate-200 p-3">
+    <h3 class="px-3 pt-3 pb-1 font-bold text-base text-slate-900">Rules</h3>
+    <div class="divide-y divide-slate-100">
+      <button type="button" onclick="document.getElementById('rule_actions_modal').close(); document.getElementById('import_rules_modal').showModal()" class="w-full flex items-center gap-3 px-3 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+        {{ icon("import", "w-4 h-4 text-slate-500") }}<span>Import rules</span>
+      </button>
+      <a href="/rules/export" hx-boost="false" onclick="document.getElementById('rule_actions_modal').close()" class="w-full flex items-center gap-3 px-3 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+        {{ icon("export", "w-4 h-4 text-slate-500") }}<span>Export rules</span>
+      </a>
+      <button type="button" onclick="document.getElementById('rule_actions_modal').close(); document.getElementById('rule_packs_modal').showModal()" class="w-full flex items-center gap-3 px-3 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+        {{ icon("package", "w-4 h-4 text-slate-500") }}<span>Rule packs</span>
+      </button>
+      <form action="/rules/apply-all" method="POST">
+        <button type="submit" class="w-full flex items-center gap-3 px-3 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+          {{ icon("refresh-cw", "w-4 h-4 text-slate-500") }}
+          <span>Reset and reapply<span class="block text-xs font-normal text-slate-400">Run every rule over all your transactions again</span></span>
+        </button>
+      </form>
+    </div>
+  </div>
+</dialog>
+
+<!-- =================================================================== -->
+<!-- MODAL: NEW CATEGORIZATION RULE                                      -->
+<!-- =================================================================== -->
+<dialog id="new_rule_modal" class="modal">
+  <div class="modal-box rounded-2xl bg-white border border-slate-200 shadow-2xl p-6 text-slate-900 max-w-xl">
+    <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+      <div>
+        <h3 class="font-bold text-lg text-slate-900">New Rule</h3>
+        <p class="text-xs text-slate-400">Match transaction descriptions and automatically set category or merchant</p>
+      </div>
+      <form method="dialog"><button class="text-slate-400 hover:text-slate-600">✕</button></form>
+    </div>
+
+    <form
+      id="categorization-rule-form"
+      action="/rules/new"
+      method="POST"
+      class="space-y-4 pt-4"
+    >
+      <!-- Name & Priority Row -->
+      <div class="grid grid-cols-12 gap-3 items-end">
+        <div class="col-span-8 sm:col-span-9">
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Rule Name</label>
+          <input
+            type="text"
+            name="name"
+            required
+            placeholder="e.g. Uber, Netflix, Whole Foods"
+            class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+        </div>
+        <div class="col-span-4 sm:col-span-3">
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Priority (0-100)</label>
+          <input
+            type="number"
+            name="priority"
+            value="10"
+            min="0"
+            max="1000"
+            class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-mono focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+        </div>
+      </div>
+
+      <!-- Conditions Section -->
+      <div class="space-y-2 pt-1">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-800">Conditions</span>
+          <!-- AND / OR Toggle -->
+          <div class="bg-slate-100 p-0.5 rounded-lg border border-slate-200 flex items-center text-[0.6875rem] font-semibold">
+            <label class="cursor-pointer px-2.5 py-0.5 rounded-md transition-colors has-[:checked]:bg-white has-[:checked]:text-slate-900 has-[:checked]:shadow-xs text-slate-500">
+              <input type="radio" name="conditions_op" value="and" checked class="hidden" />
+              <span>AND</span>
+            </label>
+            <label class="cursor-pointer px-2.5 py-0.5 rounded-md transition-colors has-[:checked]:bg-white has-[:checked]:text-slate-900 has-[:checked]:shadow-xs text-slate-500">
+              <input type="radio" name="conditions_op" value="or" class="hidden" />
+              <span>OR</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Condition Row -->
+        <div id="condition-rows" class="space-y-2">
+          <div class="condition-row grid grid-cols-12 gap-2 items-center">
+            <select name="field[]" class="col-span-4 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+              <option value="description" selected>Description</option>
+              <option value="original_description">Original Description</option>
+              <option value="merchant">Merchant</option>
+              <option value="amount">Amount</option>
+            </select>
+
+            <select name="op[]" class="col-span-3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+              <option value="contains" selected>contains</option>
+              <option value="regex">regex</option>
+              <option value="starts_with">starts with</option>
+              <option value="ends_with">ends with</option>
+              <option value="equals">equals</option>
+            </select>
+
+            <input
+              type="text"
+              name="val[]"
+              placeholder="Pattern..."
+              class="col-span-4 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-mono focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+
+            <button type="button" onclick="this.closest('.condition-row').remove()" class="col-span-1 text-slate-400 hover:text-rose-600 transition-colors">✕</button>
+          </div>
+        </div>
+
+        <button type="button" onclick="addConditionRow()" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:underline pt-0.5 block">
+          + Add condition
+        </button>
+      </div>
+
+      <!-- Actions Section -->
+      <div class="space-y-2 pt-1 border-t border-slate-100">
+        <span class="text-xs font-bold text-slate-800 block pt-1">Actions</span>
+        <div id="action-rows" class="space-y-2">
+          <div class="action-row grid grid-cols-12 gap-2 items-center">
+            <select name="action_op[]" class="col-span-4 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+              <option value="set_category" selected>Set category</option>
+              <option value="set_description">Clean description</option>
+              <option value="set_merchant">Set merchant</option>
+            </select>
+
+            <select name="action_val[]" required class="col-span-7 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+              <option value="" disabled selected>Select category...</option>
+              {% for c in categories %}
+              <option value="{{ c.id }}">{{ c.name }}</option>
+              {% endfor %}
+            </select>
+
+            <button type="button" onclick="this.closest('.action-row').remove()" class="col-span-1 text-slate-400 hover:text-rose-600 transition-colors">✕</button>
+          </div>
+        </div>
+
+        <button type="button" onclick="addActionRow()" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:underline pt-0.5 block">
+          + Add action
+        </button>
+      </div>
+
+      <!-- Checkboxes -->
+      <div class="space-y-2 pt-2 border-t border-slate-100">
+        <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-700 select-none">
+          <input type="checkbox" name="apply_to_existing" value="true" checked class="checkbox checkbox-xs rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+          <span class="font-medium">Apply matching actions to existing ledger transactions</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-500 select-none">
+          <input type="checkbox" name="overwrite_existing" value="true" class="checkbox checkbox-xs rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+          <span>Also overwrite transactions that already have a category assigned</span>
+        </label>
+      </div>
+
+      <!-- Modal Bottom Actions -->
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button type="button" onclick="document.getElementById('new_rule_modal').close()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+          Cancel
+        </button>
+        <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors">
+          Save Rule
+        </button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+
+<!-- =================================================================== -->
+<!-- MODAL: EDIT CATEGORIZATION RULE                                     -->
+<!-- =================================================================== -->
+<dialog id="edit_rule_modal" class="modal">
+  <div class="modal-box rounded-2xl bg-white border border-slate-200 shadow-2xl p-6 text-slate-900 max-w-xl">
+    <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+      <div>
+        <h3 class="font-bold text-lg text-slate-900">Edit Rule</h3>
+        <p class="text-xs text-slate-400">Modify transaction matching patterns and automated actions</p>
+      </div>
+      <form method="dialog"><button class="text-slate-400 hover:text-slate-600">✕</button></form>
+    </div>
+
+    <form
+      id="edit-rule-form"
+      action="/rules/new"
+      method="POST"
+      class="space-y-4 pt-4"
+    >
+      <!-- Name & Priority Row -->
+      <div class="grid grid-cols-12 gap-3 items-end">
+        <div class="col-span-8 sm:col-span-9">
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Rule Name</label>
+          <input
+            type="text"
+            id="edit_rule_name"
+            name="name"
+            required
+            class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+        </div>
+        <div class="col-span-4 sm:col-span-3">
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Priority (0-100)</label>
+          <input
+            type="number"
+            id="edit_rule_priority"
+            name="priority"
+            value="10"
+            min="0"
+            max="1000"
+            class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-mono focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+        </div>
+      </div>
+
+      <!-- Conditions Section -->
+      <div class="space-y-2 pt-1">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-800">Conditions</span>
+          <!-- AND / OR Toggle -->
+          <div class="bg-slate-100 p-0.5 rounded-lg border border-slate-200 flex items-center text-[0.6875rem] font-semibold">
+            <label class="cursor-pointer px-2.5 py-0.5 rounded-md transition-colors has-[:checked]:bg-white has-[:checked]:text-slate-900 has-[:checked]:shadow-xs text-slate-500">
+              <input type="radio" id="edit_cond_op_and" name="conditions_op" value="and" checked class="hidden" />
+              <span>AND</span>
+            </label>
+            <label class="cursor-pointer px-2.5 py-0.5 rounded-md transition-colors has-[:checked]:bg-white has-[:checked]:text-slate-900 has-[:checked]:shadow-xs text-slate-500">
+              <input type="radio" id="edit_cond_op_or" name="conditions_op" value="or" class="hidden" />
+              <span>OR</span>
+            </label>
+          </div>
+        </div>
+
+        <div id="edit-condition-rows" class="space-y-2">
+          <!-- Dynamic Condition Rows injected via JS -->
+        </div>
+
+        <button type="button" onclick="addEditConditionRow()" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:underline pt-0.5 block">
+          + Add condition
+        </button>
+      </div>
+
+      <!-- Actions Section -->
+      <div class="space-y-2 pt-1 border-t border-slate-100">
+        <span class="text-xs font-bold text-slate-800 block pt-1">Actions</span>
+        <div id="edit-action-rows" class="space-y-2">
+          <!-- Dynamic Action Rows injected via JS -->
+        </div>
+
+        <button type="button" onclick="addEditActionRow()" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:underline pt-0.5 block">
+          + Add action
+        </button>
+      </div>
+
+      <!-- Checkboxes -->
+      <div class="space-y-2 pt-2 border-t border-slate-100">
+        <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-700 select-none">
+          <input type="checkbox" name="apply_to_existing" value="true" checked class="checkbox checkbox-xs rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+          <span class="font-medium">Apply matching actions to existing ledger transactions</span>
+        </label>
+      </div>
+
+      <!-- Modal Bottom Actions -->
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button type="button" onclick="document.getElementById('edit_rule_modal').close()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+          Cancel
+        </button>
+        <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors">
+          Update Rule
+        </button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+
+<!-- =================================================================== -->
+<!-- MODAL: NEW MATCHING RULE (Transfers & Recurring)                    -->
+<!-- =================================================================== -->
+<dialog id="new_matching_rule_modal" class="modal">
+  <div class="modal-box rounded-2xl bg-white border border-slate-200 shadow-2xl p-6 text-slate-900 max-w-xl max-h-[90vh] overflow-y-auto space-y-4">
+    <!-- Header -->
+    <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+      <div>
+        <h3 class="font-bold text-lg text-slate-900">New matching rule</h3>
+        <p class="text-xs text-slate-400">Configure pairing logic for transfers or recurring subscriptions</p>
+      </div>
+      <form method="dialog"><button class="text-slate-400 hover:text-slate-600">✕</button></form>
+    </div>
+
+    <form action="/rules/matching/new" method="POST" class="space-y-4 pt-1">
+      <input type="hidden" id="matching_rule_type" name="rule_type" value="transfer" />
+
+      <!-- Step 1: Identification & Action Mode -->
+      <div class="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+        <h4 class="font-bold text-xs text-slate-800 uppercase tracking-wider">1. What this rule is</h4>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Rule Name</label>
+          <input
+            type="text"
+            name="name"
+            required
+            placeholder="e.g. Exact amount nearby date, Account in description"
+            class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Action Mode</label>
+          <div class="grid grid-cols-2 gap-2 pt-0.5">
+            <label class="cursor-pointer">
+              <input type="radio" name="action_mode" value="links" class="peer hidden" checked />
+              <div class="p-2.5 rounded-xl border border-slate-200 text-center text-xs font-semibold peer-checked:bg-emerald-50 peer-checked:text-emerald-700 peer-checked:border-emerald-300 text-slate-600 transition-all flex items-center justify-center gap-1.5 shadow-xs">
+                {{ icon("link", "w-3.5 h-3.5") }} Links Automatically
+              </div>
+            </label>
+            <label class="cursor-pointer">
+              <input type="radio" name="action_mode" value="suggests" class="peer hidden" />
+              <div class="p-2.5 rounded-xl border border-slate-200 text-center text-xs font-semibold peer-checked:bg-amber-50 peer-checked:text-amber-700 peer-checked:border-amber-300 text-slate-600 transition-all flex items-center justify-center gap-1.5 shadow-xs">
+                {{ icon("sparkles", "w-3.5 h-3.5") }} Suggests Match
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Scope & Direction -->
+      <div class="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+        <h4 class="font-bold text-xs text-slate-800 uppercase tracking-wider">2. Transaction Scope</h4>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Money Direction</label>
+            <select name="direction" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+              <option value="either" selected>Either (Debit & Credit)</option>
+              <option value="in">Money In (Credits)</option>
+              <option value="out">Money Out (Debits)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Account Types</label>
+            <select name="amount_match_mode" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+              <option value="exact" selected>Exact amount match</option>
+              <option value="within_percent">Within 1% tolerance</option>
+              <option value="within_amount">Within $1.00 tolerance</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Statement Text Filter (Optional)</label>
+          <input
+            type="text"
+            name="text_must_contain"
+            placeholder="e.g. Transfer, Zelle, Venmo"
+            class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+        </div>
+      </div>
+
+      <!-- Step 3: Match Criteria -->
+      <div class="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+        <h4 class="font-bold text-xs text-slate-800 uppercase tracking-wider">3. Match Criteria & Tolerances</h4>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Days Early Window</label>
+            <input
+              type="number"
+              name="days_early"
+              value="2"
+              min="0"
+              max="60"
+              class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Days Late Window</label>
+            <input
+              type="number"
+              name="days_late"
+              value="2"
+              min="0"
+              max="60"
+              class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+        </div>
+
+        <div class="space-y-1.5 pt-1">
+          <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-700 select-none">
+            <input type="checkbox" name="desc_names_account" class="checkbox checkbox-xs rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+            <span class="font-medium">One description names the other account</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-700 select-none">
+            <input type="checkbox" name="closest_date_wins" checked class="checkbox checkbox-xs rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+            <span class="font-medium">Closest date wins when multiple candidates exist</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-700 select-none">
+            <input type="checkbox" name="unique_candidate" checked class="checkbox checkbox-xs rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+            <span class="font-medium">Pair only if exactly one candidate fits</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Modal Bottom Actions -->
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button type="button" onclick="document.getElementById('new_matching_rule_modal').close()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+          Cancel
+        </button>
+        <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors">
+          Save Matching Rule
+        </button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+
+<!-- =================================================================== -->
+<!-- MODAL: EDIT MATCHING RULE                                           -->
+<!-- =================================================================== -->
+<dialog id="edit_matching_rule_modal" class="modal">
+  <div class="modal-box rounded-2xl bg-white border border-slate-200 shadow-2xl p-6 text-slate-900 max-w-xl max-h-[90vh] overflow-y-auto space-y-4">
+    <!-- Header -->
+    <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+      <div>
+        <h3 class="font-bold text-lg text-slate-900">Edit Matching Rule</h3>
+        <p class="text-xs text-slate-400">Configure pairing logic for transfers or recurring subscriptions</p>
+      </div>
+      <form method="dialog"><button class="text-slate-400 hover:text-slate-600">✕</button></form>
+    </div>
+
+    <form id="edit-matching-rule-form" action="/rules/new" method="POST" class="space-y-4 pt-1">
+      <!-- Step 1: Identification & Action Mode -->
+      <div class="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+        <h4 class="font-bold text-xs text-slate-800 uppercase tracking-wider">1. What this rule is</h4>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Rule Name</label>
+          <input
+            type="text"
+            id="edit_matching_name"
+            name="name"
+            required
+            class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Action Mode</label>
+          <div class="grid grid-cols-2 gap-2 pt-0.5">
+            <label class="cursor-pointer">
+              <input type="radio" id="edit_matching_action_links" name="action_mode" value="links" class="peer hidden" />
+              <div class="p-2.5 rounded-xl border border-slate-200 text-center text-xs font-semibold peer-checked:bg-emerald-50 peer-checked:text-emerald-700 peer-checked:border-emerald-300 text-slate-600 transition-all flex items-center justify-center gap-1.5 shadow-xs">
+                {{ icon("link", "w-3.5 h-3.5") }} Links Automatically
+              </div>
+            </label>
+            <label class="cursor-pointer">
+              <input type="radio" id="edit_matching_action_suggests" name="action_mode" value="suggests" class="peer hidden" />
+              <div class="p-2.5 rounded-xl border border-slate-200 text-center text-xs font-semibold peer-checked:bg-amber-50 peer-checked:text-amber-700 peer-checked:border-amber-300 text-slate-600 transition-all flex items-center justify-center gap-1.5 shadow-xs">
+                {{ icon("sparkles", "w-3.5 h-3.5") }} Suggests Match
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Scope & Direction -->
+      <div class="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+        <h4 class="font-bold text-xs text-slate-800 uppercase tracking-wider">2. Transaction Scope</h4>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Money Direction</label>
+            <select id="edit_matching_direction" name="direction" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+              <option value="either">Either (Debit & Credit)</option>
+              <option value="in">Money In (Credits)</option>
+              <option value="out">Money Out (Debits)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Amount Closeness</label>
+            <select id="edit_matching_amount_mode" name="amount_match_mode" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+              <option value="exact">Exact amount match</option>
+              <option value="within_percent">Within 1% tolerance</option>
+              <option value="within_amount">Within $1.00 tolerance</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Statement Text Filter (Optional)</label>
+          <input
+            type="text"
+            id="edit_matching_text"
+            name="text_must_contain"
+            class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+        </div>
+      </div>
+
+      <!-- Step 3: Match Criteria -->
+      <div class="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+        <h4 class="font-bold text-xs text-slate-800 uppercase tracking-wider">3. Match Criteria & Tolerances</h4>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Days Early Window</label>
+            <input
+              type="number"
+              id="edit_matching_days_early"
+              name="days_early"
+              value="2"
+              min="0"
+              max="60"
+              class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Days Late Window</label>
+            <input
+              type="number"
+              id="edit_matching_days_late"
+              name="days_late"
+              value="2"
+              min="0"
+              max="60"
+              class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+        </div>
+
+        <div class="space-y-1.5 pt-1">
+          <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-700 select-none">
+            <input type="checkbox" id="edit_matching_desc_names" name="desc_names_account" class="checkbox checkbox-xs rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+            <span class="font-medium">One description names the other account</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-700 select-none">
+            <input type="checkbox" id="edit_matching_closest_date" name="closest_date_wins" checked class="checkbox checkbox-xs rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+            <span class="font-medium">Closest date wins when multiple candidates exist</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-700 select-none">
+            <input type="checkbox" id="edit_matching_unique_cand" name="unique_candidate" checked class="checkbox checkbox-xs rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+            <span class="font-medium">Pair only if exactly one candidate fits</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Modal Bottom Actions -->
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button type="button" onclick="document.getElementById('edit_matching_rule_modal').close()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+          Cancel
+        </button>
+        <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors">
+          Update Matching Rule
+        </button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+
+<!-- =================================================================== -->
+<!-- MODAL: RULE PACKS                                                   -->
+<!-- =================================================================== -->
+<dialog id="rule_packs_modal" class="modal">
+  <div class="modal-box rounded-2xl bg-white border border-slate-200 shadow-2xl p-6 text-slate-900 max-w-md space-y-4">
+    <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+      <div>
+        <h3 class="font-bold text-lg text-slate-900">Rule Packs</h3>
+        <p class="text-xs text-slate-400">Install curated rule presets for instant categorization</p>
+      </div>
+      <form method="dialog"><button class="text-slate-400 hover:text-slate-600">✕</button></form>
+    </div>
+
+    <div class="space-y-3">
+      <div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
+        <div>
+          <h4 class="font-bold text-sm text-slate-900">US Standard Finance Pack</h4>
+          <p class="text-xs text-slate-500 mt-0.5">Groceries, Amazon, Streaming, Gas, and Payroll</p>
+        </div>
+        <form action="/rules/reset-defaults" method="POST">
+          <button type="submit" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors">
+            Install
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="flex justify-end pt-2">
+      <button onclick="document.getElementById('rule_packs_modal').close()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+        Close
+      </button>
+    </div>
+  </div>
+</dialog>
+
+
+<!-- =================================================================== -->
+<!-- MODAL: IMPORT RULES                                                 -->
+<!-- =================================================================== -->
+<dialog id="import_rules_modal" class="modal">
+  <div class="modal-box rounded-2xl bg-white border border-slate-200 shadow-2xl p-6 text-slate-900 max-w-md space-y-4">
+    <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+      <div>
+        <h3 class="font-bold text-lg text-slate-900">Import Rules</h3>
+        <p class="text-xs text-slate-400">Choose a file from Export, or paste its contents. You'll see what changes before anything is saved.</p>
+      </div>
+      <form method="dialog"><button class="text-slate-400 hover:text-slate-600">✕</button></form>
+    </div>
+
+    {# A normal page load: the preview page is the answer to this POST #}
+    <form method="POST" action="/rules/import/preview" enctype="multipart/form-data" hx-boost="false" class="space-y-4">
+      <input
+        type="file"
+        name="file"
+        accept=".json,application/json"
+        class="block w-full text-xs text-slate-600 file:mr-3 file:px-3 file:py-2 file:rounded-xl file:border-0 file:bg-slate-100 file:text-slate-700 file:font-semibold hover:file:bg-slate-200"
+      >
+      <textarea
+        name="text"
+        rows="5"
+        placeholder="…or paste the exported JSON here"
+        class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+      ></textarea>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+        <button type="button" onclick="document.getElementById('import_rules_modal').close()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+          Cancel
+        </button>
+        <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors">
+          Review import
+        </button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+
+<!-- Client JS for tabs, dynamic condition/action rows, and modals -->
+<script>
+  // Runs again whenever the page is swapped in (hx-boost), so top-level names use var.
+  var allCategoriesData = [
+    {% for c in categories %}
+    { id: "{{ c.id }}", name: {{ c.name | tojson }} },
+    {% endfor %}
+  ];
+
+  function switchRuleTab(tab) {
+    const sections = {
+      'categorization': document.getElementById('section-categorization'),
+      'transfer': document.getElementById('section-transfer'),
+      'recurring': document.getElementById('section-recurring')
+    };
+
+    const buttons = {
+      'categorization': document.getElementById('tab-btn-cat'),
+      'transfer': document.getElementById('tab-btn-transfer'),
+      'recurring': document.getElementById('tab-btn-recurring'),
+      'all': document.getElementById('tab-btn-all')
+    };
+
+    // Update button styles
+    Object.keys(buttons).forEach(k => {
+      const btn = buttons[k];
+      if (!btn) return;
+      if (k === tab) {
+        btn.className = 'px-2.5 md:px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 md:gap-2 shrink-0 whitespace-nowrap bg-emerald-600 text-white shadow-xs';
+      } else {
+        btn.className = 'px-2.5 md:px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 md:gap-2 shrink-0 whitespace-nowrap bg-white text-slate-600 hover:text-slate-900 border border-slate-200';
+      }
+      if (k === 'all') btn.classList.add('max-md:hidden');  // three tabs fit a phone
+      const count = btn.querySelector('[data-tab-count]');
+      if (count) {
+        const on = k === tab;
+        count.classList.toggle('bg-emerald-700/60', on);
+        count.classList.toggle('text-emerald-100', on);
+        count.classList.toggle('bg-slate-100', !on);
+        count.classList.toggle('text-slate-700', !on);
+      }
+    });
+
+    // Keep the tab in the address, so a save or Back comes back to it
+    const url = new URL(location.href);
+    if (tab === 'categorization') url.searchParams.delete('tab');
+    else url.searchParams.set('tab', tab);
+    kashReplaceUrl(url.pathname + url.search + url.hash);
+
+    // Show/hide sections
+    if (tab === 'all') {
+      Object.values(sections).forEach(s => s && s.classList.remove('hidden'));
+    } else {
+      Object.keys(sections).forEach(k => {
+        const s = sections[k];
+        if (!s) return;
+        if (k === tab) s.classList.remove('hidden');
+        else s.classList.add('hidden');
+      });
+    }
+  }
+
+  function openMatchingModal(type) {
+    document.getElementById('matching_rule_type').value = type;
+    document.getElementById('new_matching_rule_modal').showModal();
+  }
+
+  function addConditionRow() {
+    const container = document.getElementById('condition-rows');
+    const row = document.createElement('div');
+    row.className = 'condition-row grid grid-cols-12 gap-2 items-center';
+    row.innerHTML = `
+      <select name="field[]" class="col-span-4 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+        <option value="description" selected>Description</option>
+        <option value="original_description">Original Description</option>
+        <option value="merchant">Merchant</option>
+        <option value="amount">Amount</option>
+      </select>
+      <select name="op[]" class="col-span-3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+        <option value="contains" selected>contains</option>
+        <option value="regex">regex</option>
+        <option value="starts_with">starts with</option>
+        <option value="ends_with">ends with</option>
+        <option value="equals">equals</option>
+      </select>
+      <input
+        type="text"
+        name="val[]"
+        placeholder="Pattern..."
+        class="col-span-4 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-mono focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+      />
+      <button type="button" onclick="this.closest('.condition-row').remove()" class="col-span-1 text-slate-400 hover:text-rose-600 transition-colors">✕</button>
+    `;
+    container.appendChild(row);
+  }
+
+  function addActionRow() {
+    const container = document.getElementById('action-rows');
+    const firstRow = container.querySelector('.action-row');
+    if (!firstRow) return;
+    const clone = firstRow.cloneNode(true);
+    container.appendChild(clone);
+  }
+
+  function openEditRuleModal(id, name, priority, condOp, conditions, actions) {
+    const form = document.getElementById('edit-rule-form');
+    form.action = '/rules/' + id + '/update';
+    document.getElementById('edit_rule_name').value = name;
+    document.getElementById('edit_rule_priority').value = priority;
+
+    if (condOp === 'or') {
+      document.getElementById('edit_cond_op_or').checked = true;
+    } else {
+      document.getElementById('edit_cond_op_and').checked = true;
+    }
+
+    // Populate conditions
+    const condContainer = document.getElementById('edit-condition-rows');
+    condContainer.innerHTML = '';
+    const condList = (conditions && conditions.length) ? conditions : [{field: 'description', op: 'contains', value: ''}];
+    condList.forEach(c => {
+      addEditConditionRow(c.field || 'description', c.op || 'contains', c.value || '');
+    });
+
+    // Populate actions
+    const actContainer = document.getElementById('edit-action-rows');
+    actContainer.innerHTML = '';
+    const actList = (actions && actions.length) ? actions : [{op: 'set_category', value: ''}];
+    actList.forEach(a => {
+      addEditActionRow(a.op || 'set_category', a.value || '');
+    });
+
+    document.getElementById('edit_rule_modal').showModal();
+  }
+
+  function addEditConditionRow(field = 'description', op = 'contains', val = '') {
+    const container = document.getElementById('edit-condition-rows');
+    const row = document.createElement('div');
+    row.className = 'condition-row grid grid-cols-12 gap-2 items-center';
+    row.innerHTML = `
+      <select name="field[]" class="col-span-4 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+        <option value="description" ${field === 'description' ? 'selected' : ''}>Description</option>
+        <option value="original_description" ${field === 'original_description' ? 'selected' : ''}>Original Description</option>
+        <option value="merchant" ${field === 'merchant' ? 'selected' : ''}>Merchant</option>
+        <option value="amount" ${field === 'amount' ? 'selected' : ''}>Amount</option>
+      </select>
+      <select name="op[]" class="col-span-3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+        <option value="contains" ${op === 'contains' ? 'selected' : ''}>contains</option>
+        <option value="regex" ${op === 'regex' ? 'selected' : ''}>regex</option>
+        <option value="starts_with" ${op === 'starts_with' ? 'selected' : ''}>starts with</option>
+        <option value="ends_with" ${op === 'ends_with' ? 'selected' : ''}>ends with</option>
+        <option value="equals" ${op === 'equals' ? 'selected' : ''}>equals</option>
+      </select>
+      <input
+        type="text"
+        name="val[]"
+        value="${String(val).replace(/"/g, '&quot;')}"
+        placeholder="Pattern..."
+        class="col-span-4 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-mono focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+      />
+      <button type="button" onclick="this.closest('.condition-row').remove()" class="col-span-1 text-slate-400 hover:text-rose-600 transition-colors">✕</button>
+    `;
+    container.appendChild(row);
+  }
+
+  function addEditActionRow(op = 'set_category', val = '') {
+    const container = document.getElementById('edit-action-rows');
+    const row = document.createElement('div');
+    row.className = 'action-row grid grid-cols-12 gap-2 items-center';
+    
+    row.innerHTML = `
+      <select name="action_op[]" class="col-span-4 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+        <option value="set_category" ${op === 'set_category' ? 'selected' : ''}>Set category</option>
+        <option value="set_description" ${op === 'set_description' ? 'selected' : ''}>Clean description</option>
+        <option value="set_merchant" ${op === 'set_merchant' ? 'selected' : ''}>Set merchant</option>
+      </select>
+      <select name="action_val[]" required class="col-span-7 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"></select>
+      <button type="button" onclick="this.closest('.action-row').remove()" class="col-span-1 text-slate-400 hover:text-rose-600 transition-colors">✕</button>
+    `;
+    // Options as elements, so category names are never read as HTML
+    const choices = row.querySelector('select[name="action_val[]"]');
+    const placeholder = new Option('Select category...', '');
+    placeholder.disabled = true;
+    choices.add(placeholder);
+    allCategoriesData.forEach(c => {
+      const sel = String(c.id) === String(val);
+      choices.add(new Option(c.name, c.id, sel, sel));
+    });
+    container.appendChild(row);
+  }
+
+  function openEditMatchingRuleModal(id, name, actionMode, config) {
+    const form = document.getElementById('edit-matching-rule-form');
+    form.action = '/rules/' + id + '/matching/update';
+    document.getElementById('edit_matching_name').value = name;
+
+    if (actionMode === 'suggests') {
+      document.getElementById('edit_matching_action_suggests').checked = true;
+    } else {
+      document.getElementById('edit_matching_action_links').checked = true;
+    }
+
+    const cfg = config || {};
+    document.getElementById('edit_matching_direction').value = cfg.direction || 'either';
+    document.getElementById('edit_matching_amount_mode').value = cfg.amount_match_mode || 'exact';
+    document.getElementById('edit_matching_days_early').value = cfg.days_early ?? 2;
+    document.getElementById('edit_matching_days_late').value = cfg.days_late ?? 2;
+    document.getElementById('edit_matching_text').value = cfg.text_must_contain || '';
+    document.getElementById('edit_matching_desc_names').checked = !!cfg.description_names_other_account;
+    document.getElementById('edit_matching_closest_date').checked = cfg.closest_date_wins !== false;
+    document.getElementById('edit_matching_unique_cand').checked = cfg.unique_candidate !== false;
+
+    document.getElementById('edit_matching_rule_modal').showModal();
+  }
+</script>
+{% endblock %}

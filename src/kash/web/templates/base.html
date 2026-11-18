@@ -1,0 +1,268 @@
+{% from "components/icons.html" import icon %}
+<!DOCTYPE html>
+{% set ui = display() %}
+{# Theme and text size are per person (middleware); login pages use the household's. #}
+{% set theme = request.state.theme | default(ui.theme) %}
+{% set font_scale = request.state.font_scale | default(ui.font_scale) %}
+<html lang="en" data-theme="{{ 'dark' if theme == 'dark' else 'light' }}" data-theme-setting="{{ theme }}"{% if font_scale != 100 %} style="font-size: {{ font_scale }}%"{% endif %}>
+<head>
+  <script>
+    // "Follow system": pick light or dark before the page paints, and follow changes.
+    (function () {
+      const html = document.documentElement;
+      if (html.dataset.themeSetting !== "system") return;
+      const query = window.matchMedia("(prefers-color-scheme: dark)");
+      const apply = () => html.setAttribute("data-theme", query.matches ? "dark" : "light");
+      apply();
+      query.addEventListener("change", apply);
+    })();
+  </script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>{% block title %}Kash - Personal Finance{% endblock %}</title>
+  
+  {# DaisyUI components first, then Tailwind utilities so utility classes win #}
+  <link rel="preload" href="/static/fonts/plus-jakarta-sans-latin.woff2?v=12" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{{ static_url("css/daisyui.min.css") }}">
+  <link rel="stylesheet" href="{{ static_url("css/tailwind.min.css") }}">
+  <link rel="stylesheet" href="{{ static_url("css/app.css") }}">
+  
+  {# Links and forms swap the page body instead of reloading it (static/js/kash.js).
+     Back/Forward always ask the server, so they never show an old copy of the numbers. #}
+  <meta name="htmx-config" content='{"globalViewTransitions": true, "historyCacheSize": 0, "historyRestoreAsHxRequest": false}'>
+  <script src="{{ static_url("js/htmx.min.js") }}"></script>
+  <script src="{{ static_url("js/kash.js") }}"></script>
+  {% include "components/pwa_head.html" %}
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased min-h-screen flex flex-col md:flex-row" hx-boost="true" hx-indicator="#kash-progress">
+  <div id="kash-progress" aria-hidden="true"></div>
+
+  <!-- Desktop Sidebar Navigation -->
+  <aside class="kash-sidebar hidden md:flex flex-col w-60 bg-sidebar-dark border-r border-slate-800 min-h-screen p-4 sticky top-0 h-screen z-30 flex-shrink-0">
+    <!-- Brand Header -->
+    <div class="flex items-center gap-3 px-3 py-3 mb-6">
+      <div class="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-sm">
+        {{ icon("wallet", "w-5 h-5") }}
+      </div>
+      <div>
+        <h1 class="text-lg font-bold tracking-tight text-white leading-none">Kash</h1>
+        <span class="text-[0.625rem] text-slate-400 font-medium">Personal Finance</span>
+      </div>
+    </div>
+
+    <!-- Navigation Menu Links -->
+    <nav class="flex-1 space-y-1 overflow-y-auto px-1">
+      <a href="/" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all {% if active_page == 'dashboard' %}bg-emerald-600 text-white font-semibold shadow-xs{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+        {{ icon("dashboard", "w-4 h-4") }}
+        <span>Dashboard</span>
+      </a>
+
+      <a href="/bills" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all {% if active_page == 'bills' %}bg-emerald-600 text-white font-semibold shadow-xs{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+        {{ icon("bills", "w-4 h-4") }}
+        <span>Bills</span>
+      </a>
+
+      <a href="/budget" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all {% if active_page == 'budget' %}bg-emerald-600 text-white font-semibold shadow-xs{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+        {{ icon("budget", "w-4 h-4") }}
+        <span>Budget</span>
+      </a>
+
+      <a href="/accounts" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all {% if active_page == 'accounts' %}bg-emerald-600 text-white font-semibold shadow-xs{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+        {{ icon("credit-card", "w-4 h-4") }}
+        <span>Accounts</span>
+      </a>
+
+      <a href="/transactions" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all {% if active_page == 'transactions' %}bg-emerald-600 text-white font-semibold shadow-xs{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+        {{ icon("transactions", "w-4 h-4") }}
+        <span>Transactions</span>
+      </a>
+
+      <a href="/categories" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all {% if active_page == 'categories' %}bg-emerald-600 text-white font-semibold shadow-xs{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+        {{ icon("categories", "w-4 h-4") }}
+        <span>Categories</span>
+      </a>
+
+      <a href="/rules" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all {% if active_page == 'rules' %}bg-emerald-600 text-white font-semibold shadow-xs{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+        {{ icon("rules", "w-4 h-4") }}
+        <span>Rules</span>
+      </a>
+
+      {% if request.state.ai_enabled | default(false) %}
+      <a href="/ai/review" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all {% if active_page == 'ai_review' %}bg-emerald-600 text-white font-semibold shadow-xs{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+        {{ icon("sparkles", "w-4 h-4") }}
+        <span>AI activity</span>
+      </a>
+      {% endif %}
+
+      <a href="/reports" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all {% if active_page == 'reports' %}bg-emerald-600 text-white font-semibold shadow-xs{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+        {{ icon("reports", "w-4 h-4") }}
+        <span>Reports</span>
+      </a>
+
+      <a href="/goals" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all {% if active_page == 'goals' %}bg-emerald-600 text-white font-semibold shadow-xs{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+        {{ icon("goals", "w-4 h-4") }}
+        <span>Goals</span>
+      </a>
+
+      <a href="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all {% if active_page == 'settings' %}bg-emerald-600 text-white font-semibold shadow-xs{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+        {{ icon("settings", "w-4 h-4") }}
+        <span>Settings</span>
+      </a>
+
+      <a href="/settings?section=data#data" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-slate-400 hover:text-white hover:bg-white/5">
+        {{ icon("database", "w-4 h-4") }}
+        <span>Data &amp; backup</span>
+      </a>
+    </nav>
+
+    <!-- Bottom Sidebar Footer & Theme Toggle -->
+    <div class="pt-4 border-t border-slate-800 px-2 space-y-3">
+      <div class="flex items-center justify-between text-xs text-slate-400 font-medium">
+        <span>Dark Mode</span>
+        <input 
+          type="checkbox" 
+          class="toggle toggle-xs toggle-success" 
+          id="theme-toggle" 
+          onchange="toggleTheme()"
+        >
+      </div>
+
+      <div class="flex items-center gap-3 p-2 bg-slate-800/60 rounded-xl border border-slate-700/50">
+        <div class="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">
+          {{ ((request.state.user_name | default("")) or "K")[:1] | upper }}
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-xs font-semibold text-white truncate">{{ (request.state.user_name | default("")) or "Kash" }}</p>
+          <p class="text-[0.625rem] text-emerald-400 font-medium">Self-Hosted</p>
+        </div>
+        <form method="post" action="/logout" hx-boost="false">
+          <button type="submit" class="text-[0.6875rem] font-semibold text-slate-400 hover:text-white transition-colors" title="Log out">Log out</button>
+        </form>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Viewport Area -->
+  <div class="flex-1 flex flex-col min-w-0">
+
+    <!-- Desktop Top Header Bar (Search & User Profile per Reference Image) -->
+    <header class="kash-topbar hidden md:flex items-center justify-between px-8 py-4 bg-white border-b border-slate-100 sticky top-0 z-20">
+      {# Enter opens Transactions with the search; it narrows further as you type there. #}
+      <form action="/transactions" method="get" role="search" class="w-96 relative">
+        <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+          {{ icon("search", "w-4 h-4") }}
+        </span>
+        <input
+          type="search"
+          name="search"
+          aria-label="Search transactions"
+          placeholder="Search transactions, merchants, or categories..."
+          class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white transition-colors"
+        >
+      </form>
+
+      <div class="flex items-center gap-3">
+        <a href="/settings" class="w-9 h-9 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-50 transition-colors">
+          {{ icon("settings", "w-4 h-4") }}
+        </a>
+        <div class="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs shadow-xs" title="{{ (request.state.user_name | default("")) or "Kash" }}">
+          {{ ((request.state.user_name | default("")) or "K")[:1] | upper }}
+        </div>
+      </div>
+    </header>
+
+    <!-- Main content -->
+    <main id="main-content" class="flex-1 px-4 py-3 md:px-8 md:py-8 pb-24 md:pb-8 max-w-6xl w-full mx-auto">
+      {% set flash_error = request.query_params.get("error") %}
+      {% if flash_error %}
+      <div role="alert" class="mb-4 max-w-4xl mx-auto bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium rounded-2xl px-4 py-3">{{ flash_error }}</div>
+      {% elif request.query_params.get("synced") %}
+      <div role="status" class="mb-4 max-w-4xl mx-auto bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium rounded-2xl px-4 py-3">Bank sync finished.</div>
+      {% elif request.query_params.get("notice") %}
+      <div role="status" class="mb-4 max-w-4xl mx-auto bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium rounded-2xl px-4 py-3">{{ request.query_params.get("notice") }}</div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+
+  </div>
+
+  <!-- Mobile Bottom Navigation Bar -->
+  <nav class="kash-bottom-nav md:hidden">
+    <a href="/" class="kash-nav-item {% if active_page == 'dashboard' %}active{% endif %}">
+      {{ icon("dashboard", "w-5 h-5") }}
+      <span>Dashboard</span>
+    </a>
+    <a href="/bills" class="kash-nav-item {% if active_page == 'bills' %}active{% endif %}">
+      {{ icon("bills", "w-5 h-5") }}
+      <span>Bills</span>
+    </a>
+    <a href="/budget" class="kash-nav-item {% if active_page == 'budget' %}active{% endif %}">
+      {{ icon("budget", "w-5 h-5") }}
+      <span>Budget</span>
+    </a>
+    <a href="/accounts" class="kash-nav-item {% if active_page == 'accounts' %}active{% endif %}">
+      {{ icon("credit-card", "w-5 h-5") }}
+      <span>Accounts</span>
+    </a>
+    {# More stays marked on the pages you open from it #}
+    <a href="/more" class="kash-nav-item {% if active_page in ('more', 'settings', 'reports', 'goals', 'categories', 'rules', 'ai_review') %}active{% endif %}">
+      {{ icon("more", "w-5 h-5") }}
+      <span>More</span>
+    </a>
+  </nav>
+
+  <script>
+    // Money in the browser, formatted like the server does (Settings → currency/format). In the
+    // body, so it follows a change made without a full reload.
+    window.kashMoney = (function () {
+      const plain = new Intl.NumberFormat({{ ui.fmt.intl | tojson }}, { style: "currency", currency: {{ ui.currency | tojson }} });
+      const signed = new Intl.NumberFormat({{ ui.fmt.intl | tojson }}, { style: "currency", currency: {{ ui.currency | tojson }}, signDisplay: "exceptZero" });
+      return (value, sign) => (sign ? signed : plain).format(value);
+    })();
+    // Merchant logo that can't load: show the box's normal icon instead (components/merchant_icon.html).
+    function kashLogoFailed(img) {
+      const box = img.parentElement;
+      box.className = box.dataset.fallbackClass;
+      box.setAttribute("style", box.dataset.fallbackStyle || "");
+      box.removeAttribute("title");
+      box.innerHTML = box.querySelector("template").innerHTML;
+    }
+    // Upload / remove a merchant's custom icon (routes/merchant_icons.py), then refresh the page.
+    window.kashMerchantIcon = {
+      async send(url, body) {
+        const resp = await fetch(url, { method: "POST", body });
+        if (resp.ok) {
+          document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+          return kashRefresh();
+        }
+        const data = await resp.json().catch(() => ({}));
+        alert(data.error || "Couldn't save the icon.");
+      },
+      upload(merchant, file) {
+        const form = new FormData();
+        form.append("merchant", merchant);
+        form.append("file", file);
+        return this.send("/merchant-icons", form);
+      },
+      remove(iconId) {
+        return this.send(`/merchant-icons/${iconId}/delete`);
+      },
+    };
+  </script>
+  <script>
+    // Sidebar switch: change now, save in Settings in the background.
+    function toggleTheme() {
+      const html = document.documentElement;
+      const target = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', target);
+      html.dataset.themeSetting = target;
+      fetch('/settings/theme', { method: 'POST', body: new URLSearchParams({ theme: target }) });
+    }
+    (function () {
+      const toggle = document.getElementById('theme-toggle');
+      if (toggle) toggle.checked = document.documentElement.getAttribute('data-theme') === 'dark';
+      try { localStorage.removeItem('kash-theme'); } catch (e) {}  // older versions kept it here
+    })();
+  </script>
+</body>
+</html>

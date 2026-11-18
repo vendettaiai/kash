@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Import rules - Kash{% endblock %}
+
+{% block content %}
+<div class="space-y-5 max-w-3xl mx-auto pb-12">
+
+  <div>
+    <div class="flex items-center gap-2">
+      <a href="/rules" class="text-slate-400 hover:text-slate-600" title="Rules">{{ icon("chevron-left", "w-5 h-5") }}</a>
+      <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Import rules</h2>
+    </div>
+    <p class="text-xs text-slate-400 mt-0.5">Nothing is saved until you import. Rules that aren't in the file stay as they are.</p>
+  </div>
+
+  <form method="POST" action="/rules/import" class="space-y-5">
+    <input type="hidden" name="payload" value="{{ payload }}">
+
+    <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl p-5 space-y-3">
+      <h3 class="font-bold text-sm text-slate-900">{{ plan.rules | length }} rule{{ "" if plan.rules | length == 1 else "s" }} in the file</h3>
+      <ul class="text-sm text-slate-700 space-y-1">
+        <li><b>{{ preview.add | length }}</b> new{% if preview.add %}: <span class="text-slate-500">{{ preview.add | map(attribute="name") | join(", ") }}</span>{% endif %}</li>
+        <li><b>{{ preview.update | length }}</b> replace the rule with the same name here{% if preview.update %}: <span class="text-slate-500">{{ preview.update | map(attribute="name") | join(", ") }}</span>{% endif %}</li>
+        <li><b>{{ preview.unchanged }}</b> already the same</li>
+      </ul>
+      {% if plan.skipped %}
+      <div class="text-xs text-rose-600 space-y-0.5">
+        <div class="font-semibold">Can't be read, so they're left out:</div>
+        {% for problem in plan.skipped %}<div>{{ problem }}</div>{% endfor %}
+      </div>
+      {% endif %}
+      {% if plan.unknown_accounts %}
+      <p class="text-xs text-amber-700">These rules only apply to accounts from the file that aren't here, so they won't match until you edit them: {{ plan.unknown_accounts | join(", ") }}.</p>
+      {% endif %}
+    </div>
+
+    {% if plan.unknown %}
+    <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl p-5 space-y-4">
+      <div>
+        <h3 class="font-bold text-sm text-slate-900">Categories to match</h3>
+        <p class="text-xs text-slate-500 mt-0.5">The file refers to {{ plan.unknown | length }} categor{{ "y" if plan.unknown | length == 1 else "ies" }} by an id this Kash doesn't have (categories get new ids when the database is reset). Choose the category to use for each; Kash's best guess is selected.</p>
+      </div>
+      {% for ref in plan.unknown %}
+      <label class="block space-y-1.5">
+        <span class="block text-xs font-semibold text-slate-700">
+          {% if ref.name %}“{{ ref.name }}”{% if ref.group %} <span class="font-normal text-slate-400">in {{ ref.group }}</span>{% endif %}{% else %}A category from the file{% endif %}
+          <span class="block font-normal text-slate-400">Used by: {{ ref.rule_names | join(", ") }}</span>
+        </span>
+        <select name="map:{{ ref.key }}" required class="select select-sm select-bordered w-full rounded-xl bg-white text-xs">
+          <option value="" {% if not ref.default_choice %}selected{% endif %} disabled>Choose a category…</option>
+          {% if ref.name and not ref.suggestion %}
+          <option value="{{ choice_create }}" {% if ref.default_choice == choice_create %}selected{% endif %}>Create “{{ ref.name }}”</option>
+          {% endif %}
+          {% for c in categories %}
+          <option value="{{ c.id }}" {% if ref.default_choice == c.id | string %}selected{% endif %}>{{ c.name }}</option>
+          {% endfor %}
+          <option value="{{ choice_none }}">No category (import the rule paused)</option>
+        </select>
+      </label>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="flex items-center justify-end gap-2">
+      <a href="/rules" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">Cancel</a>
+      <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors">Import rules</button>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

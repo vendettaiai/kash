@@ -1,0 +1,282 @@
+{#
+  Transaction detail modal: set the category, mark as transfer, create a rule,
+  or add the transaction to an existing rule.
+  Needs `categories` and `rule_choices` in the template context. Open with openTxModal(...);
+  the optional last argument is transaction_icon_info(tx) for the merchant icon section.
+#}
+{% from "components/icons.html" import icon as tx_icon_svg %}
+<dialog id="tx_modal" class="modal">
+  <div class="modal-box rounded-3xl bg-white border border-slate-100 shadow-2xl max-w-lg p-6">
+    <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+      <div>
+        <h3 class="font-extrabold text-base text-slate-900">Transaction Details</h3>
+        <p class="text-[0.6875rem] text-slate-400 font-medium mt-0.5" id="tx_modal_meta">Account & Date</p>
+      </div>
+      <button type="button" onclick="tx_modal.close()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center font-bold text-sm transition-colors">✕</button>
+    </div>
+
+    <!-- Amount and Description Hero Header -->
+    <div class="py-5 text-center border-b border-slate-100">
+      <div class="text-3xl font-black text-slate-900 tracking-tight" id="tx_modal_amount">$0.00</div>
+      <div class="font-bold text-sm text-slate-800 mt-1.5" id="tx_modal_description">Description</div>
+      <div class="text-[0.6875rem] text-slate-400 mt-0.5 truncate max-w-sm mx-auto" id="tx_modal_raw_desc"></div>
+    </div>
+
+    <!-- Merchant icon: belongs to the merchant, so it changes every transaction and bill from it -->
+    <details id="tx_icon_section" class="hidden pt-4 pb-1 border-b border-slate-100">
+      <summary class="flex items-center gap-3 pb-3 cursor-pointer select-none list-none">
+        <div id="tx_icon_preview" class="kash-icon-box rounded-xl bg-slate-100 text-slate-600">{{ tx_icon_svg("receipt", "w-5 h-5") }}</div>
+        <span class="flex-1 min-w-0">
+          <span class="block text-xs font-bold text-slate-700">Merchant icon</span>
+          <span id="tx_icon_status" class="block text-[0.6875rem] text-slate-400 truncate"></span>
+        </span>
+        <span class="text-[0.6875rem] font-semibold text-emerald-600">Change</span>
+      </summary>
+      <div class="pb-4 space-y-2">
+        <label class="block">
+          <span class="block text-[0.6875rem] font-semibold text-slate-600 mb-1">Use for merchants named</span>
+          <input id="tx_icon_merchant" type="text" maxlength="80" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 uppercase focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+          <span class="block text-[0.6875rem] text-slate-400 mt-1">Every transaction and bill whose merchant has these words gets the icon. Shorten it (e.g. to just the brand) to cover all stores.</span>
+        </label>
+        <div class="flex items-center gap-2">
+          <label class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-lg cursor-pointer transition-colors">
+            Upload image<input id="tx_icon_file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" onchange="txIconUpload(this)">
+          </label>
+          <button id="tx_icon_remove" type="button" onclick="txIconRemove()" class="hidden px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">Remove my image</button>
+          <span class="text-[0.6875rem] text-slate-400">PNG, JPEG, WebP or GIF, up to 512 KB</span>
+        </div>
+      </div>
+    </details>
+
+    <!-- 1. Quick Category Assignment -->
+    <form id="tx_category_form" method="post" class="space-y-3 pt-4">
+      <input type="hidden" name="next" class="tx-modal-next" value="/transactions">
+      <div>
+        <label class="block text-xs font-bold text-slate-700 mb-1.5">Assigned Category</label>
+        <div class="flex gap-2">
+          <select id="tx_modal_category_id" name="category_id" class="flex-1 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+            <option value="">Uncategorized</option>
+            {% for cat in categories %}
+            <option value="{{ cat.id }}">{{ cat.name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-colors">
+            Save
+          </button>
+        </div>
+      </div>
+      <label class="flex items-start gap-2 cursor-pointer">
+        <input type="checkbox" id="tx_modal_is_transfer" name="is_transfer" value="true" class="checkbox checkbox-xs rounded mt-0.5" />
+        <span class="text-xs text-slate-700">
+          <span class="font-semibold">Transfer between my accounts</span>
+          <span class="block text-[0.6875rem] text-slate-400">Not counted as income or spending.</span>
+        </span>
+      </label>
+    </form>
+
+    <!-- Make this a bill (money out only); the form loads when opened -->
+    <details id="tx_bill_section" class="hidden mt-4" ontoggle="if (this.open) txLoadBillForm()">
+      <summary class="w-full py-2.5 px-3.5 bg-slate-100 hover:bg-slate-200/60 text-slate-800 font-bold text-xs rounded-xl flex items-center justify-between transition-colors cursor-pointer select-none list-none">
+        <span class="flex items-center gap-2">{{ tx_icon_svg("calendar", "w-3.5 h-3.5") }}<span>Make this a bill</span></span>
+        <span class="text-[0.6875rem] text-slate-500">Repeats ▼</span>
+      </summary>
+      <div id="tx_bill_body" class="mt-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+        <p class="text-xs text-slate-400">Loading…</p>
+      </div>
+    </details>
+
+    <!-- 2. Create a rule from this transaction, or add it to an existing rule -->
+    <div class="mt-5 pt-4 border-t border-slate-100">
+      <button type="button" onclick="document.getElementById('tx_rule_section').classList.toggle('hidden')" class="w-full py-2.5 px-3.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-xl flex items-center justify-between transition-colors">
+        <span class="flex items-center gap-2">
+          <span>⚡</span>
+          <span>Categorize with a Rule</span>
+        </span>
+        <span class="text-[0.6875rem] text-emerald-600">New or existing ▼</span>
+      </button>
+
+      <div id="tx_rule_section" class="hidden mt-3 p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+        {% if rule_choices %}
+        <div class="grid grid-cols-2 gap-1 p-1 bg-white border border-slate-200 rounded-xl text-xs font-bold">
+          <button type="button" id="tx_rule_mode_new" onclick="setTxRuleMode('new')" class="py-1.5 rounded-lg">New rule</button>
+          <button type="button" id="tx_rule_mode_existing" onclick="setTxRuleMode('existing')" class="py-1.5 rounded-lg">Add to existing rule</button>
+        </div>
+        {% endif %}
+
+        <form id="tx_rule_form" method="post" class="space-y-3">
+          <input type="hidden" name="next" class="tx-modal-next" value="/transactions">
+
+          <div class="rule-new">
+            <label class="block text-[0.6875rem] font-bold text-slate-700 mb-1" for="tx_rule_name">Rule Name</label>
+            <input type="text" id="tx_rule_name" name="name" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500" required />
+          </div>
+
+          {% if rule_choices %}
+          <div class="rule-existing hidden">
+            <label class="block text-[0.6875rem] font-bold text-slate-700 mb-1" for="tx_rule_id">Rule</label>
+            <select id="tx_rule_id" name="rule_id" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500" disabled required>
+              {% for r in rule_choices %}
+              <option value="{{ r.id }}" data-category="{{ r.category_id }}">{{ r.name }} → {{ r.category }}</option>
+              {% endfor %}
+            </select>
+            <p class="text-[0.6875rem] text-slate-400 mt-1">The match text is added to this rule as another way to match. The transaction gets the rule's category.</p>
+          </div>
+          {% endif %}
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[0.6875rem] font-bold text-slate-700 mb-1" for="tx_rule_op">Condition Match</label>
+              <select id="tx_rule_op" name="op" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                <option value="contains">Description Contains</option>
+                <option value="starts_with">Description Starts With</option>
+                <option value="regex">Regular Expression</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[0.6875rem] font-bold text-slate-700 mb-1" for="tx_rule_value">Match Text</label>
+              <input type="text" id="tx_rule_value" name="value" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500" required />
+            </div>
+          </div>
+
+          <div class="rule-new">
+            <label class="block text-[0.6875rem] font-bold text-slate-700 mb-1" for="tx_rule_category_id">Target Category</label>
+            <select id="tx_rule_category_id" name="category_id" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500" required>
+              {% for cat in categories %}
+              <option value="{{ cat.id }}">{{ cat.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="flex items-center gap-2 pt-1">
+            <input type="checkbox" id="tx_apply_existing" name="apply_to_existing" value="true" checked class="checkbox checkbox-xs checkbox-primary rounded" />
+            <label for="tx_apply_existing" class="text-xs font-medium text-slate-700 cursor-pointer">Also re-categorize every existing matching transaction</label>
+          </div>
+          <button type="submit" id="tx_rule_submit" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors">
+            Create & Apply Rule
+          </button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</dialog>
+
+<script>
+// Runs again whenever the page is swapped in (hx-boost), so top-level names use var.
+// Merchant icon section (see transaction_icon_info in services/merchant_icons.py)
+var txIconInfo = null;
+var txIconFallback = document.getElementById('tx_icon_preview').innerHTML;
+function txShowIcon(info, amount) {
+  txIconInfo = info || null;
+  const section = document.getElementById('tx_icon_section');
+  section.classList.toggle('hidden', !info || !info.merchant);
+  section.open = false;
+  if (!info) return;
+  const preview = document.getElementById('tx_icon_preview');
+  const logo = info.icon;
+  document.getElementById('tx_icon_merchant').value = info.merchant || '';
+  document.getElementById('tx_icon_remove').classList.toggle('hidden', !(logo && logo.custom));
+  document.getElementById('tx_icon_status').textContent = !logo
+    ? 'None yet: add one for this merchant'
+    : logo.custom ? `Your image · ${logo.merchant}` : `${logo.title} (built in)`;
+  if (logo) {
+    preview.className = 'kash-icon-box rounded-xl kash-logo-tile' + (logo.custom ? ' kash-logo-custom' : '');
+    preview.style.backgroundColor = logo.background;
+    preview.innerHTML = '';
+    const img = document.createElement('img');
+    img.src = logo.url;
+    img.alt = '';
+    preview.appendChild(img);
+  } else {
+    preview.className = 'kash-icon-box rounded-xl bg-slate-100 text-slate-600';
+    preview.removeAttribute('style');
+    preview.innerHTML = txIconFallback;
+  }
+}
+function txLoadBillForm() {
+  const section = document.getElementById('tx_bill_section');
+  const next = encodeURIComponent(window.location.pathname + window.location.search);
+  htmx.ajax('GET', `${section.dataset.url}?next=${next}`, { target: '#tx_bill_body', swap: 'innerHTML' });
+}
+function txIconUpload(input) {
+  const name = document.getElementById('tx_icon_merchant').value.trim();
+  if (input.files.length && name) kashMerchantIcon.upload(name, input.files[0]);
+  else if (!name) alert('Enter the merchant name the icon is for.');
+  input.value = '';
+}
+function txIconRemove() {
+  if (txIconInfo && txIconInfo.icon && txIconInfo.icon.custom_id) {
+    kashMerchantIcon.remove(txIconInfo.icon.custom_id);
+  }
+}
+
+function openTxModal(id, cleanDesc, rawDesc, amount, dateStr, catId, accName, isTransfer, merchant) {
+  const modal = document.getElementById('tx_modal');
+  txShowIcon(merchant, amount);
+  const billSection = document.getElementById('tx_bill_section');
+  billSection.open = false;
+  billSection.classList.toggle('hidden', !(parseFloat(amount) < 0) || !!isTransfer);
+  billSection.dataset.url = `/transactions/${id}/bill-draft`;
+  document.getElementById('tx_bill_body').innerHTML = '<p class="text-xs text-slate-400">Loading…</p>';
+  document.getElementById('tx_modal_meta').textContent = accName ? `${accName} • ${dateStr}` : dateStr;
+  const amtNum = parseFloat(amount);
+  const amtEl = document.getElementById('tx_modal_amount');
+  if (amtNum < 0) {
+    amtEl.textContent = window.kashMoney(amtNum);
+    amtEl.className = 'text-3xl font-black text-slate-900 tracking-tight';
+  } else {
+    amtEl.textContent = window.kashMoney(amtNum, true);
+    amtEl.className = 'text-3xl font-black text-emerald-600 tracking-tight';
+  }
+  document.getElementById('tx_modal_description').textContent = cleanDesc;
+  document.getElementById('tx_modal_raw_desc').textContent = rawDesc && rawDesc !== cleanDesc ? rawDesc : '';
+  
+  // Set form actions
+  window.txModalId = id;
+  document.getElementById('tx_category_form').action = `/transactions/${id}/category`;
+  document.getElementById('tx_rule_section').classList.add('hidden');
+  setTxRuleMode('new');
+  const here = window.location.pathname + window.location.search;
+  document.querySelectorAll('.tx-modal-next').forEach(el => { el.value = here; });
+  document.getElementById('tx_modal_is_transfer').checked = !!isTransfer;
+
+  // Set category dropdowns
+  const catSelect = document.getElementById('tx_modal_category_id');
+  if (catSelect) catSelect.value = catId || '';
+  const ruleCatSelect = document.getElementById('tx_rule_category_id');
+  if (ruleCatSelect && catId) ruleCatSelect.value = catId;
+  // Suggest an existing rule that already assigns this transaction's category
+  const ruleSelect = document.getElementById('tx_rule_id');
+  if (ruleSelect && catId) {
+    const match = Array.from(ruleSelect.options).find(o => o.dataset.category === catId);
+    if (match) ruleSelect.value = match.value;
+  }
+  
+  // Pre-fill rule form
+  document.getElementById('tx_rule_name').value = `${cleanDesc.slice(0, 25)} Rule`;
+  document.getElementById('tx_rule_value').value = cleanDesc;
+  
+  modal.showModal();
+}
+
+function setTxRuleMode(mode) {
+  const existing = mode === 'existing';
+  const form = document.getElementById('tx_rule_form');
+  form.action = `/transactions/${window.txModalId}/${existing ? 'add-to-rule' : 'create-rule'}`;
+  form.querySelectorAll('.rule-new').forEach(el => {
+    el.classList.toggle('hidden', existing);
+    el.querySelectorAll('input, select').forEach(f => { f.disabled = existing; });
+  });
+  form.querySelectorAll('.rule-existing').forEach(el => {
+    el.classList.toggle('hidden', !existing);
+    el.querySelectorAll('input, select').forEach(f => { f.disabled = !existing; });
+  });
+  document.getElementById('tx_rule_submit').textContent = existing ? 'Add to Rule & Apply' : 'Create & Apply Rule';
+  const active = 'py-1.5 rounded-lg bg-emerald-600 text-white';
+  const idle = 'py-1.5 rounded-lg text-slate-600 hover:bg-slate-100';
+  const newBtn = document.getElementById('tx_rule_mode_new');
+  const existingBtn = document.getElementById('tx_rule_mode_existing');
+  if (newBtn) newBtn.className = existing ? idle : active;
+  if (existingBtn) existingBtn.className = existing ? active : idle;
+}
+</script>

@@ -1,0 +1,291 @@
+{# Customize dashboard: bottom sheet on phones, centered panel on computers.
+   Drag ⋮⋮ (or use the arrow keys on it) to reorder, − to remove, + to add.
+   Phone and computer layouts are separate; the tab for this device opens first.
+   Saved with POST /dashboard/layout (services/dashboard_layout.py). #}
+<dialog id="kash-customize" class="kash-sheet" aria-labelledby="kc-title">
+  <div class="kash-sheet-panel">
+    <div class="kash-sheet-grabber" aria-hidden="true"></div>
+    <div class="flex items-center justify-between gap-3 px-5 pt-2 md:pt-5">
+      <h3 id="kc-title" tabindex="-1" autofocus class="font-bold text-base text-slate-900 outline-none">Customize dashboard</h3>
+      <button type="button" onclick="kashCustomize.close()" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors" aria-label="Close">
+        {{ icon("x", "w-4 h-4") }}
+      </button>
+    </div>
+
+    <div class="px-5 pt-3">
+      <div class="kc-tabs grid grid-cols-2 p-1 rounded-xl bg-slate-100 text-xs font-semibold" role="tablist">
+        <button type="button" role="tab" data-device="mobile" class="kc-tab flex items-center justify-center gap-1.5 py-1.5 rounded-lg transition-colors">{{ icon("smartphone", "w-3.5 h-3.5") }} Phone</button>
+        <button type="button" role="tab" data-device="desktop" class="kc-tab flex items-center justify-center gap-1.5 py-1.5 rounded-lg transition-colors">{{ icon("dashboard", "w-3.5 h-3.5") }} Computer</button>
+      </div>
+    </div>
+
+    <div class="kash-sheet-body px-5 pb-4">
+      <div class="flex items-baseline justify-between mt-4 mb-2">
+        <h4 class="text-[0.6875rem] font-bold uppercase tracking-wide text-slate-400">On your dashboard</h4>
+        <span class="text-[0.6875rem] text-slate-400">Drag <span aria-hidden="true">⋮⋮</span> to reorder</span>
+      </div>
+      <ul id="kc-on" class="space-y-2" aria-label="Cards on your dashboard"></ul>
+      <p id="kc-empty" class="hidden py-4 text-center text-xs text-slate-400">No cards. Add some below.</p>
+
+      <h4 id="kc-off-title" class="text-[0.6875rem] font-bold uppercase tracking-wide text-slate-400 mt-5 mb-2">Add cards</h4>
+      <ul id="kc-off" class="space-y-2" aria-label="Cards you can add"></ul>
+    </div>
+
+    <div class="kash-sheet-footer flex items-center justify-between gap-2 px-5 py-3 border-t border-slate-100">
+      <button type="button" id="kc-reset" class="text-xs font-semibold text-slate-500 hover:text-slate-800">Reset to default</button>
+      <div class="flex items-center gap-2">
+        <button type="button" onclick="kashCustomize.close()" class="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
+        <button type="button" id="kc-save" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50">Save</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<template id="kc-icons">
+  {% for name in ["bank", "arrow-up-right", "trending-up", "wallet", "pie-chart", "arrow-left-right", "budget", "transactions", "calendar", "bar-chart"] %}
+  <span data-icon="{{ name }}">{{ icon(name, "w-4 h-4") }}</span>
+  {% endfor %}
+</template>
+
+<script>
+window.kashCustomize = (function () {
+  const data = {{ layout_editor | tojson }};
+  const dialog = document.getElementById("kash-customize");
+  const onList = document.getElementById("kc-on");
+  const offList = document.getElementById("kc-off");
+  const SPANS = [4, 5, 6, 7, 8, 12];
+  let device = "mobile";
+  let working = {};  // device -> [{id, span}]
+
+  const iconFor = name => {
+    const el = document.getElementById("kc-icons").content.querySelector(`[data-icon="${name}"]`);
+    return el ? el.innerHTML : "";
+  };
+  const cardInfo = id => data[device].cards.find(c => c.id === id);
+  const clone = list => list.map(c => ({ id: c.id, span: c.span }));
+
+  function row(card, entry, on) {
+    const li = document.createElement("li");
+    li.className = "kc-row flex items-center gap-3 p-2.5 pr-2 rounded-2xl bg-white border border-slate-100 shadow-xs";
+    li.dataset.id = card.id;
+    const handle = on
+      ? `<button type="button" class="kc-handle" aria-label="Move ${card.title}. Use the up and down arrow keys.">
+           <svg viewBox="0 0 10 16" class="w-2.5 h-4" fill="currentColor" aria-hidden="true"><circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/><circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="2" cy="14" r="1.5"/><circle cx="8" cy="14" r="1.5"/></svg>
+         </button>`
+      : "";
+    const width = on && device === "desktop"
+      ? `<div class="kc-width flex items-center gap-1" title="Width">
+           <button type="button" class="kc-narrow" aria-label="Narrower">−</button>
+           <span class="kc-bar" aria-hidden="true">${Array.from({ length: 12 }, (_, i) => (i < entry.span ? '<i class="on"></i>' : "<i></i>")).join("")}</span>
+           <button type="button" class="kc-wider" aria-label="Wider">+</button>
+         </div>`
+      : "";
+    const action = on
+      ? `<button type="button" class="kc-remove" aria-label="Remove ${card.title}"><span aria-hidden="true">−</span></button>`
+      : `<button type="button" class="kc-add" aria-label="Add ${card.title}"><span aria-hidden="true">+</span></button>`;
+    const badge = on
+      ? '<span class="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-emerald-50 text-emerald-600">'
+      : '<span class="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-slate-100 text-slate-500">';
+    li.innerHTML = `${handle}
+      ${badge}${iconFor(card.icon)}</span>
+      <span class="min-w-0 flex-1">
+        <span class="block text-sm font-semibold text-slate-900 truncate">${card.title}</span>
+        <span class="block text-[0.6875rem] text-slate-400 truncate">${card.description}</span>
+      </span>${width}${action}`;
+    return li;
+  }
+
+  function render() {
+    const list = working[device];
+    const onIds = new Set(list.map(c => c.id));
+    onList.replaceChildren(...list.map(entry => row(cardInfo(entry.id), entry, true)));
+    const off = data[device].cards.filter(c => !onIds.has(c.id));
+    offList.replaceChildren(...off.map(card => row(card, { span: card.span }, false)));
+    document.getElementById("kc-empty").classList.toggle("hidden", list.length > 0);
+    document.getElementById("kc-off-title").classList.toggle("hidden", off.length === 0);
+    dialog.querySelectorAll(".kc-tab").forEach(t => {
+      const active = t.dataset.device === device;
+      t.classList.toggle("kc-tab-active", active);
+      t.setAttribute("aria-selected", active);
+    });
+  }
+
+  // Keep the working order in sync with the list after a drag.
+  function readOrder() {
+    const byId = Object.fromEntries(working[device].map(c => [c.id, c]));
+    working[device] = [...onList.children].map(li => byId[li.dataset.id]);
+  }
+
+  // Smoothly slide rows to their new places (FLIP).
+  function animateMove(mutate) {
+    const rows = [...onList.children];
+    const before = new Map(rows.map(r => [r, r.getBoundingClientRect().top]));
+    mutate();
+    rows.forEach(r => {
+      const dy = before.get(r) - r.getBoundingClientRect().top;
+      if (!dy || r.classList.contains("kc-dragging")) return;
+      r.animate([{ transform: `translateY(${dy}px)` }, { transform: "translateY(0)" }],
+        { duration: 180, easing: "cubic-bezier(.2,.8,.2,1)" });
+    });
+  }
+
+  function flash(id) {
+    const li = onList.querySelector(`[data-id="${id}"]`);
+    if (!li) return;
+    li.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    li.animate([{ boxShadow: "0 0 0 2px #10b981" }, { boxShadow: "0 0 0 0 transparent" }], { duration: 700 });
+  }
+
+  // Clicks: add, remove, width
+  dialog.addEventListener("click", e => {
+    const li = e.target.closest(".kc-row");
+    if (!li) return;
+    const id = li.dataset.id;
+    const list = working[device];
+    if (e.target.closest(".kc-add")) {
+      list.push({ id, span: cardInfo(id).span });
+      render();
+      flash(id);
+    } else if (e.target.closest(".kc-remove")) {
+      li.animate([{ opacity: 1 }, { opacity: 0, transform: "translateX(24px)" }], { duration: 150 })
+        .onfinish = () => { working[device] = list.filter(c => c.id !== id); render(); };
+    } else if (e.target.closest(".kc-narrow, .kc-wider")) {
+      const entry = list.find(c => c.id === id);
+      const i = SPANS.indexOf(entry.span) + (e.target.closest(".kc-wider") ? 1 : -1);
+      entry.span = SPANS[Math.max(0, Math.min(SPANS.length - 1, i))];
+      render();
+    }
+  });
+
+  // Keyboard reordering on the handle
+  onList.addEventListener("keydown", e => {
+    const handle = e.target.closest(".kc-handle");
+    if (!handle || !["ArrowUp", "ArrowDown"].includes(e.key)) return;
+    e.preventDefault();
+    const li = handle.closest(".kc-row");
+    const other = e.key === "ArrowUp" ? li.previousElementSibling : li.nextElementSibling;
+    if (!other) return;
+    animateMove(() => e.key === "ArrowUp" ? onList.insertBefore(li, other) : onList.insertBefore(other, li));
+    readOrder();
+    handle.focus();
+  });
+
+  // Drag to reorder (mouse and touch)
+  onList.addEventListener("pointerdown", e => {
+    const handle = e.target.closest(".kc-handle");
+    if (!handle) return;
+    e.preventDefault();
+    const li = handle.closest(".kc-row");
+    const scroller = dialog.querySelector(".kash-sheet-body");
+    const grabOffset = e.clientY - li.getBoundingClientRect().top;
+    let lastY = e.clientY;
+    li.classList.add("kc-dragging");
+    // Listen on the window: moving the row in the list drops pointer capture.
+
+    let dy = 0;  // how far the row is drawn from its place in the list
+    function follow() {
+      const natural = li.getBoundingClientRect().top - dy;
+      dy = lastY - grabOffset - natural;
+      li.style.transform = `translateY(${dy}px)`;
+    }
+    function place() {
+      follow();
+      const after = [...onList.children].find(r => {
+        if (r === li) return false;
+        const box = r.getBoundingClientRect();
+        return lastY < box.top + box.height / 2;
+      });
+      if ((after || null) !== li.nextElementSibling) {
+        animateMove(() => onList.insertBefore(li, after || null));
+        follow();
+      }
+    }
+    let scrolling = null;
+    function autoScroll() {
+      const box = scroller.getBoundingClientRect();
+      const edge = 40;
+      const speed = lastY < box.top + edge ? -8 : lastY > box.bottom - edge ? 8 : 0;
+      if (speed) { scroller.scrollTop += speed; place(); }
+      scrolling = requestAnimationFrame(autoScroll);
+    }
+    function move(ev) { lastY = ev.clientY; place(); }
+    let done = false;
+    function end(ev) {
+      if (done) return;
+      if (ev && ev.type === "pointerup") { lastY = ev.clientY; place(); }  // drop where released
+      done = true;
+      cancelAnimationFrame(scrolling);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      li.animate([{ transform: `translateY(${dy}px)` }, { transform: "translateY(0)" }], { duration: 150, easing: "ease-out" });
+      li.style.transform = "";
+      li.classList.remove("kc-dragging");
+      readOrder();
+    }
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+    autoScroll();
+  });
+
+  dialog.querySelectorAll(".kc-tab").forEach(t => t.addEventListener("click", () => {
+    device = t.dataset.device;
+    render();
+  }));
+
+  async function send(body) {
+    const save = document.getElementById("kc-save");
+    save.disabled = true;
+    try {
+      const resp = await fetch("/dashboard/layout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).error || resp.statusText);
+      return true;
+    } catch (err) {
+      alert("Couldn't save the dashboard: " + err.message);
+      return false;
+    } finally {
+      save.disabled = false;
+    }
+  }
+
+  document.getElementById("kc-save").addEventListener("click", async () => {
+    // Save every device that was changed, then show the result.
+    for (const d of Object.keys(working)) {
+      const changed = JSON.stringify(working[d]) !== JSON.stringify(data[d].layout);
+      if (changed && !(await send({ device: d, cards: working[d] }))) return;
+    }
+    close();
+    setTimeout(kashRefresh, 170);  // after the sheet has slid away
+  });
+
+  document.getElementById("kc-reset").addEventListener("click", () => {
+    working[device] = clone(data[device].default);
+    render();
+  });
+
+  dialog.addEventListener("click", e => { if (e.target === dialog) close(); });  // tap outside
+
+  function open() {
+    device = window.matchMedia("(min-width: 768px)").matches ? "desktop" : "mobile";
+    working = { mobile: clone(data.mobile.layout), desktop: clone(data.desktop.layout) };
+    render();
+    dialog.showModal();
+    document.documentElement.classList.add("overflow-hidden");
+  }
+  function close() {
+    dialog.classList.add("kash-sheet-closing");
+    setTimeout(() => {
+      dialog.classList.remove("kash-sheet-closing");
+      dialog.close();
+      document.documentElement.classList.remove("overflow-hidden");
+    }, 160);
+  }
+  dialog.addEventListener("cancel", e => { e.preventDefault(); close(); });  // Esc
+  return { open, close };
+})();
+</script>

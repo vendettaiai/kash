@@ -1,0 +1,8 @@
+{# Test connection result (HTMX swap into #ai-test-result) #}
+<div role="status" class="mt-2 px-3 py-2 rounded-xl text-xs font-medium {% if ok %}bg-emerald-50 text-emerald-700 border border-emerald-200{% else %}bg-rose-50 text-rose-700 border border-rose-200{% endif %}">
+  {{ "✓" if ok else "✕" }} {{ message }}{% if ok and seconds %} ({{ seconds }} s){% endif %}
+  {% if models %}<span class="block mt-1 font-normal text-base-content/60">{{ models | length }} model{{ "s" if models | length != 1 }} available: pick one in the Model field.</span>{% endif %}
+</div>
+<datalist id="ai-model-list" hx-swap-oob="true">
+  {% for m in models %}<option value="{{ m }}">{% endfor %}
+</datalist>

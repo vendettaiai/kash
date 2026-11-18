@@ -1,0 +1,24 @@
+{# Install as an app (PWA): manifest, icons, status-bar colors, service worker. #}
+{% set theme = request.state.theme | default(display().theme) %}
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="{{ static_url("icons/icon.svg") }}">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ static_url("icons/favicon-32.png") }}">
+<link rel="apple-touch-icon" href="{{ static_url("icons/apple-touch-icon.png") }}">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kash">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+{% if theme == "dark" %}
+<meta name="theme-color" content="#0b1120">
+{% elif theme == "light" %}
+<meta name="theme-color" content="#f8fafc">
+{% else %}
+<meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b1120" media="(prefers-color-scheme: dark)">
+{% endif %}
+<script>
+  // Needs HTTPS (or localhost); elsewhere the browser just skips it.
+  if ("serviceWorker" in navigator && window.isSecureContext) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+  }
+</script>

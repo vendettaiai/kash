@@ -1,0 +1,4 @@
+/* Tailwind entry point. Built into static/css/tailwind.min.css by scripts/build_css.sh. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

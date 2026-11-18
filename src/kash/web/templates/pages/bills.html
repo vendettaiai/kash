@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+
+{% block title %}Bills - Kash{% endblock %}
+
+{% macro money(value) -%}{{ value | money }}{%- endmacro %}
+
+{% macro bill_form_fields(prefix) %}
+<div>
+  <label class="block text-xs font-semibold text-slate-700 mb-1" for="{{ prefix }}_name">Bill Name</label>
+  <input id="{{ prefix }}_name" type="text" name="name" placeholder="e.g. Water Utility" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500" required />
+</div>
+<div class="grid grid-cols-2 gap-3">
+  <div>
+    <label class="block text-xs font-semibold text-slate-700 mb-1" for="{{ prefix }}_amount">Expected Amount</label>
+    <input id="{{ prefix }}_amount" type="number" step="0.01" min="0" name="expected_amount" placeholder="0.00" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500" required />
+  </div>
+  <div>
+    <label class="block text-xs font-semibold text-slate-700 mb-1" for="{{ prefix }}_frequency">Frequency</label>
+    <select id="{{ prefix }}_frequency" name="frequency" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+      {% for value, label in frequency_labels.items() %}
+      <option value="{{ value.value }}" {% if value.value == "monthly" %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+<label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+  <input id="{{ prefix }}_variable" type="checkbox" name="is_variable" value="1" class="checkbox checkbox-xs rounded" />
+  Amount changes each time (e.g. electricity)
+</label>
+<div class="grid grid-cols-2 gap-3">
+  <div>
+    <label class="block text-xs font-semibold text-slate-700 mb-1" for="{{ prefix }}_due">Next Due Date</label>
+    <input id="{{ prefix }}_due" type="date" name="next_due_date" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500" {% if prefix == "add" %}required{% endif %} />
+  </div>
+  <div>
+    <label class="block text-xs font-semibold text-slate-700 mb-1" for="{{ prefix }}_category">Category</label>
+    <select id="{{ prefix }}_category" name="category_id" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+      <option value="">None</option>
+      {% for cat in categories %}
+      <option value="{{ cat.id }}">{{ cat.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+<div>
+  <label class="block text-xs font-semibold text-slate-700 mb-1" for="{{ prefix }}_merchant">Match payments from</label>
+  <input id="{{ prefix }}_merchant" type="text" name="merchant" placeholder="e.g. NETFLIX (defaults to the bill name)" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500" />
+  <p class="text-[0.6875rem] text-slate-400 mt-1">Bank charges whose merchant starts with this mark the bill as paid.</p>
+</div>
+{% endmacro %}
+
+{% block content %}
+{% from "components/merchant_icon.html" import merchant_box %}
+<div class="space-y-4 max-w-4xl mx-auto pb-4">
+
+  <div class="flex items-center justify-between pt-1 pb-1">
+    <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Bills</h2>
+    <div class="flex items-center gap-2">
+      <form method="post" action="/bills/scan">
+        <button type="submit" class="h-9 px-3 rounded-full bg-white border border-slate-200 flex items-center gap-1.5 text-xs font-semibold text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" title="Look through your transactions for recurring bills">
+          {{ icon("search", "w-3.5 h-3.5") }}
+          <span>Scan history</span>
+        </button>
+      </form>
+      <button onclick="add_bill_modal.showModal()" class="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" title="Add a bill">
+        {{ icon("plus", "w-4 h-4") }}
+      </button>
+    </div>
+  </div>
+
+  <!-- This month's bills: paid so far vs. still to pay -->
+  {% if progress.items %}
+  <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl p-4 md:p-5 space-y-3">
+    <div class="flex items-start justify-between gap-3">
+      <div>
+        <div class="text-xs font-medium text-slate-500">{{ progress.month_start.strftime("%B") }} bills</div>
+        <div class="text-2xl font-extrabold text-slate-900 tracking-tight leading-snug">
+          {{ money(progress.paid) }} <span class="text-sm font-semibold text-slate-400">paid of {{ money(progress.total) }}</span>
+        </div>
+      </div>
+      <div class="text-right">
+        <div class="text-xs font-medium text-slate-500">Left to pay</div>
+        <div class="text-lg font-bold {% if progress.overdue %}text-rose-600{% else %}text-slate-900{% endif %}">{{ money(progress.remaining) }}</div>
+      </div>
+    </div>
+
+    <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden" role="progressbar" aria-valuenow="{{ progress.pct_paid }}" aria-valuemin="0" aria-valuemax="100" aria-label="Bills paid this month">
+      <div class="h-full rounded-full bg-emerald-500 transition-all duration-500" style="width: {{ progress.pct_paid }}%;"></div>
+    </div>
+
+    <div class="flex items-center justify-between text-[0.6875rem] text-slate-500">
+      <span>{{ progress.paid_count }} of {{ progress.items | length }} paid · {{ progress.pct_paid }}%</span>
+      {% if progress.overdue %}<span class="text-rose-600 font-semibold">{{ money(progress.overdue) }} overdue</span>{% endif %}
+    </div>
+
+    <details id="due-this-month" class="text-xs">
+      <summary class="cursor-pointer font-semibold text-emerald-700 hover:text-emerald-800 select-none">See all {{ progress.items | length }} due this month</summary>
+      <div class="mt-2 divide-y divide-slate-100">
+        {% for item in progress.items %}
+        <div class="py-2 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2 min-w-0">
+            {% if item.status == "paid" %}
+            <span class="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0">{{ icon("check", "w-3 h-3") }}</span>
+            {% elif item.status == "overdue" %}
+            <span class="w-5 h-5 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0 text-[0.6875rem] font-bold">!</span>
+            {% else %}
+            <span class="w-5 h-5 rounded-full border-2 border-slate-200 flex-shrink-0"></span>
+            {% endif %}
+            <span class="font-semibold text-slate-800 truncate">{{ item.bill.name }}</span>
+            <span class="text-slate-400 whitespace-nowrap">{{ item.due_date | day }}</span>
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <span class="font-bold {% if item.status == 'paid' %}text-emerald-600{% elif item.status == 'overdue' %}text-rose-600{% else %}text-slate-900{% endif %}">
+              {% if item.status != "paid" and item.bill.is_variable_amount %}≈ {% endif %}{{ money(item.amount) }}
+            </span>
+            {% if item.status != "paid" and item.occurrence_id %}
+            <form method="post" action="/bills/occurrences/{{ item.occurrence_id }}/paid">
+              <button type="submit" class="px-2 py-0.5 text-[0.6875rem] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-md transition-colors">Mark paid</button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </details>
+  </div>
+  {% endif %}
+
+  <!-- Detected bills to review -->
+  {% if candidates %}
+  <div id="detection-banner" class="kash-card p-4 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-3">
+    <div class="flex items-start gap-3">
+      <div class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 mt-0.5 shadow-xs">
+        {{ icon("zap", "w-4 h-4") }}
+      </div>
+      <div>
+        <h4 class="font-bold text-sm text-slate-900">We found {{ candidates | length }} possible recurring bill{{ "s" if candidates | length != 1 }}</h4>
+        <p class="text-xs text-slate-500">Found in your transactions. Add the ones that are real bills; dismissed ones won't be suggested again.</p>
+      </div>
+    </div>
+
+    <div class="space-y-2">
+      {% for c in candidates %}
+      <div id="candidate-{{ c.id }}" class="p-3 bg-white rounded-xl border border-slate-200/80 shadow-xs space-y-2">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div class="min-w-0 flex items-center gap-3">
+          {{ merchant_box(merchant_icon(c.merchant_name), "calendar", box="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0", fallback_class="bg-emerald-50 text-emerald-600", icon_class="w-4 h-4") }}
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-bold text-sm text-slate-900">{{ c.merchant_name }}</span>
+              <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[0.625rem] font-semibold">{{ c.confidence_score | int }}% sure</span>
+            </div>
+            <p class="text-[0.6875rem] text-slate-500 mt-0.5">
+              {{ frequency_labels[c.detected_frequency] }} •
+              {% if c.is_variable %}about {{ money(c.average_amount) }}{% else %}{{ money(c.last_amount) }}{% endif %} •
+              next around {{ c.next_estimated_date | day }}
+            </p>
+          </div>
+          </div>
+          <div class="flex items-center gap-2 self-end sm:self-auto">
+            <form method="post" action="/bills/candidates/{{ c.id }}/dismiss">
+              <button type="submit" class="px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-rose-600 rounded-lg transition-colors">Not a bill</button>
+            </form>
+            <form method="post" action="/bills/candidates/{{ c.id }}/accept">
+              <button type="submit" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors">Add Bill</button>
+            </form>
+          </div>
+        </div>
+        <details id="candidate-{{ c.id }}" class="text-[0.6875rem] text-slate-500">
+          <summary class="cursor-pointer font-semibold text-emerald-700 hover:text-emerald-800 select-none">Why this looks like a bill · edit before adding</summary>
+          <ul class="mt-1.5 ml-4 list-disc space-y-0.5">
+            {% for reason in candidate_reasons[c.id] %}<li>{{ reason }}</li>{% endfor %}
+          </ul>
+          <form method="post" action="/bills/candidates/{{ c.id }}/accept" class="mt-2 flex flex-wrap items-end gap-2">
+            <label class="flex flex-col gap-0.5">
+              <span class="font-semibold text-slate-600">Name</span>
+              <input type="text" name="name" value="{{ c.merchant_name }}" class="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500" />
+            </label>
+            <label class="flex flex-col gap-0.5">
+              <span class="font-semibold text-slate-600">Amount</span>
+              <input type="number" step="0.01" min="0" name="amount" value="{{ '%.2f' | format(c.average_amount if c.is_variable else c.last_amount) }}" class="w-28 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500" />
+            </label>
+            <button type="submit" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-colors">Add with changes</button>
+          </form>
+        </details>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Upcoming due dates -->
+  <div class="space-y-2.5">
+    <div class="flex items-end justify-between px-1">
+      <div>
+        <div class="text-xs font-medium text-slate-500">Upcoming Bills</div>
+        <div class="text-2xl font-extrabold text-slate-900 tracking-tight leading-snug">{{ money(total_upcoming) }}</div>
+        <div class="text-[0.6875rem] text-slate-400">Due in the next {{ upcoming_days }} days</div>
+      </div>
+    </div>
+
+    <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl divide-y divide-slate-100 overflow-hidden">
+      {% for bill, occ in upcoming_bills %}
+      {% set days = (occ.due_date - today).days %}
+      {% set cat = category_map.get(bill.category_id) if bill.category_id else none %}
+      <div class="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/50 transition-colors">
+        <div class="flex items-center gap-3 min-w-0">
+          {{ merchant_box(bill_icon(bill), cat.icon if cat else "calendar", fallback_class="bg-slate-100 text-slate-600", fallback_style=("color: " ~ cat.color ~ ";") if cat else "") }}
+          <div class="min-w-0">
+            <div class="font-bold text-sm text-slate-900 leading-snug truncate">{{ bill.name }}</div>
+            <div class="text-xs {% if days < 0 %}text-rose-600 font-semibold{% elif days <= 2 %}text-amber-600 font-semibold{% else %}text-slate-400{% endif %}">
+              {{ occ.due_date | day }} ·
+              {% if days < 0 %}overdue {{ -days }} day{{ "s" if days != -1 }}{% elif days == 0 %}due today{% elif days == 1 %}tomorrow{% else %}in {{ days }} days{% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-3 flex-shrink-0">
+          <div class="font-bold text-sm text-slate-900">{% if bill.is_variable_amount %}≈ {% endif %}{{ money(occ.expected_amount) }}</div>
+          <form method="post" action="/bills/occurrences/{{ occ.id }}/paid">
+            <button type="submit" class="px-2.5 py-1 text-[0.6875rem] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors" title="Paid outside your linked accounts? Mark it here.">Mark paid</button>
+          </form>
+        </div>
+      </div>
+      {% else %}
+      <div class="p-5 text-center text-xs text-slate-400">Nothing due in the next {{ upcoming_days }} days.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- All bills -->
+  <div class="space-y-2.5 pt-2">
+    <div class="flex items-center justify-between px-1">
+      <h3 class="font-bold text-base text-slate-900">Recurring</h3>
+      <span class="text-[0.6875rem] text-slate-400">Tap a bill to edit</span>
+    </div>
+
+    <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl divide-y divide-slate-100 overflow-hidden">
+      {% for bill in recurring_bills %}
+      {% set cat = category_map.get(bill.category_id) if bill.category_id else none %}
+      {% set last = last_closed.get(bill.id) %}
+      {% set logo = bill_icon(bill) %}
+      {% set bill_data = {
+        "id": bill.id | string, "name": bill.name, "merchant": bill.merchant_name,
+        "amount": "%.2f" | format(bill.expected_amount), "frequency": bill.frequency.value,
+        "due": bill.next_due_date.isoformat(), "category": (bill.category_id | string) if bill.category_id else "",
+        "variable": bill.is_variable_amount, "status": bill.status.value,
+        "icon": logo.as_dict() if logo else none
+      } %}
+      <div role="button" tabindex="0" onclick="openBillModal({{ bill_data | tojson | forceescape }}, this)" onkeydown="if (event.key === 'Enter') this.click()"
+        class="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50 transition-colors cursor-pointer {% if bill.status.value == 'paused' %}opacity-60{% endif %}">
+        <div class="flex items-center gap-3 min-w-0">
+          {{ merchant_box(logo, cat.icon if cat else "calendar", fallback_class="bg-emerald-100 text-emerald-600", fallback_style=("color: " ~ cat.color ~ ";") if cat else "") }}
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5">
+              <span class="font-bold text-sm text-slate-900 leading-snug truncate">{{ bill.name }}</span>
+              {% if bill.status.value == "paused" %}<span class="px-1.5 py-px rounded bg-slate-100 text-slate-500 text-[0.5625rem] font-bold uppercase">Paused</span>{% endif %}
+              {% if bill.detected_automatically %}<span class="px-1.5 py-px rounded bg-emerald-50 text-emerald-700 text-[0.5625rem] font-bold uppercase" title="Found by bill detection">Auto</span>{% endif %}
+            </div>
+            <div class="text-xs text-slate-400">{{ frequency_labels[bill.frequency] }} · next {{ bill.next_due_date | day }}</div>
+            {% if last %}
+            <div class="text-[0.6875rem] mt-0.5">
+              {% if last.status.value == "missed" %}
+              <span class="text-rose-600 font-semibold">No payment found for {{ last.due_date | day }}</span>
+              {% elif bill.id in price_changed %}
+              <span class="text-amber-600 font-semibold">Price changed: {{ money(last.expected_amount) }} → {{ money(last.paid_amount) }}</span>
+              {% else %}
+              <span class="text-emerald-600">Paid {{ last.paid_at | day if last.paid_at else "" }}{% if last.paid_amount %} · {{ money(last.paid_amount) }}{% endif %}</span>
+              {% endif %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        <div class="text-right flex-shrink-0">
+          <div class="font-bold text-sm text-slate-900">{% if bill.is_variable_amount %}≈ {% endif %}{{ money(bill.expected_amount) }}</div>
+        </div>
+      </div>
+      {% else %}
+      <div class="p-5 text-center text-xs text-slate-400">No bills yet. Add one with + or use “Scan history” to find them in your transactions.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Add Bill Modal -->
+<dialog id="add_bill_modal" class="modal">
+  <div class="modal-box rounded-2xl bg-white border border-slate-200 max-h-[90vh]">
+    <h3 class="font-bold text-lg text-slate-900 mb-4">Add Bill</h3>
+    <form method="POST" action="/bills/new" class="space-y-4">
+      {{ bill_form_fields("add") }}
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button type="button" onclick="add_bill_modal.close()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
+        <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors">Save Bill</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<!-- Edit Bill Modal -->
+<dialog id="edit_bill_modal" class="modal">
+  <div class="modal-box rounded-2xl bg-white border border-slate-200 max-h-[90vh]">
+    <h3 class="font-bold text-lg text-slate-900 mb-4">Edit Bill</h3>
+    <!-- Merchant icon: belongs to the merchant, so it shows on its transactions too -->
+    <div class="flex items-center gap-3 mb-4 p-3 rounded-xl bg-slate-50 border border-slate-100">
+      <div id="edit_icon_preview" class="kash-icon-box rounded-xl bg-emerald-100 text-emerald-600 kash-logo-tile">{{ icon("calendar", "w-5 h-5") }}</div>
+      <div class="flex-1 min-w-0">
+        <div class="text-xs font-semibold text-slate-700">Icon</div>
+        <div id="edit_icon_note" class="text-[0.6875rem] text-slate-400"></div>
+      </div>
+      <label class="px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-lg cursor-pointer transition-colors">
+        Upload<input id="edit_icon_file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" onchange="uploadMerchantIcon(this)">
+      </label>
+      <button id="edit_icon_remove" type="button" onclick="removeMerchantIcon()" class="hidden px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">Remove</button>
+    </div>
+    <form id="edit_bill_form" method="POST" class="space-y-4">
+      {{ bill_form_fields("edit") }}
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1" for="edit_status">Status</label>
+        <select id="edit_status" name="status" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+          <option value="active">Active</option>
+          <option value="paused">Paused (no due dates or reminders)</option>
+          <option value="archived">Archived (hidden)</option>
+        </select>
+      </div>
+      <div class="flex items-center justify-between gap-2 pt-2">
+        <button type="submit" form="delete_bill_form" class="px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-xl transition-colors" onclick="return confirmDelete()">Delete</button>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="edit_bill_modal.close()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors">Save</button>
+        </div>
+      </div>
+    </form>
+    <form id="delete_bill_form" method="POST"></form>
+  </div>
+</dialog>
+
+<script>
+  function openBillModal(bill, row) {
+    document.getElementById("edit_bill_form").action = `/bills/${bill.id}/edit`;
+    document.getElementById("delete_bill_form").action = `/bills/${bill.id}/delete`;
+    document.getElementById("edit_name").value = bill.name;
+    document.getElementById("edit_amount").value = bill.amount;
+    document.getElementById("edit_frequency").value = bill.frequency;
+    document.getElementById("edit_variable").checked = !!bill.variable;
+    document.getElementById("edit_due").value = bill.due;
+    document.getElementById("edit_category").value = bill.category || "";
+    document.getElementById("edit_merchant").value = bill.merchant;
+    document.getElementById("edit_status").value = bill.status;
+    showBillIcon(bill, row);
+    edit_bill_modal.showModal();
+  }
+
+  // Merchant icon in the pop-up (routes/merchant_icons.py). Top-level names use var: the
+  // script runs again whenever the page is swapped in (hx-boost).
+  var iconBill = null;
+  function showBillIcon(bill, row) {
+    iconBill = bill;
+    const preview = document.getElementById("edit_icon_preview");
+    const shown = row && row.querySelector(".kash-icon-box");
+    if (shown) {  // the same icon the list shows (logo or category icon)
+      preview.className = shown.className;
+      preview.setAttribute("style", shown.getAttribute("style") || "");
+      preview.innerHTML = shown.innerHTML;
+    }
+    const note = document.getElementById("edit_icon_note");
+    const logo = bill.icon;
+    note.textContent = !logo
+      ? "No logo for this merchant: the category icon is used. Upload a PNG, JPEG, WebP or GIF (up to 512 KB)."
+      : logo.custom
+        ? "Your image. It's used for this merchant everywhere, including its transactions."
+        : `${logo.title} logo (built in). Upload your own to replace it.`;
+    document.getElementById("edit_icon_remove").classList.toggle("hidden", !(logo && logo.custom));
+  }
+  function uploadMerchantIcon(input) {
+    if (input.files.length && iconBill) {
+      kashMerchantIcon.upload(iconBill.merchant || iconBill.name, input.files[0]);
+    }
+    input.value = "";
+  }
+  function removeMerchantIcon() {
+    if (iconBill && iconBill.icon && iconBill.icon.custom_id) {
+      kashMerchantIcon.remove(iconBill.icon.custom_id);
+    }
+  }
+  // Two clicks instead of a browser confirm() dialog
+  var deleteArmed = false;
+  function confirmDelete() {
+    const btn = document.querySelector('[form="delete_bill_form"]');
+    if (deleteArmed) return true;
+    deleteArmed = true;
+    btn.textContent = "Tap again to delete";
+    setTimeout(() => { deleteArmed = false; btn.textContent = "Delete"; }, 3000);
+    return false;
+  }
+</script>
+{% endblock %}

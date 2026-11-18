@@ -1,0 +1,17 @@
+{% from "components/icons.html" import icon %}
+{# The icon box for anything that has a merchant (bills, transactions, …).
+   ``logo`` comes from merchant_icon()/transaction_icon()/bill_icon()
+   (services/merchant_icons.py). Without one, or if the image fails to load,
+   the box shows ``fallback_icon`` exactly as before. Images are fitted with
+   object-fit: contain, so any size or shape of upload looks right. #}
+{% macro merchant_box(logo, fallback_icon, box="kash-icon-box rounded-xl", fallback_class="bg-slate-100 text-slate-600", fallback_style="", icon_class="w-5 h-5") -%}
+{% if logo %}
+<div class="{{ box }} kash-logo-tile{% if logo.custom %} kash-logo-custom{% endif %}" style="background-color: {{ logo.background }};" title="{{ logo.title }}"
+  data-fallback-class="{{ box }} {{ fallback_class }}" data-fallback-style="{{ fallback_style }}">
+  <img src="{{ logo.url }}" alt="" loading="lazy" decoding="async" onerror="kashLogoFailed(this)">
+  <template>{{ icon(fallback_icon, icon_class) }}</template>
+</div>
+{%- else -%}
+<div class="{{ box }} {{ fallback_class }}"{% if fallback_style %} style="{{ fallback_style }}"{% endif %}>{{ icon(fallback_icon, icon_class) }}</div>
+{%- endif %}
+{%- endmacro %}

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}More - Kash{% endblock %}
+
+{% block content %}
+{% set tiles = [
+  ("/reports", "reports", "bg-purple-50 text-purple-600", "Reports", "Financial insights"),
+  ("/goals", "goals", "bg-teal-50 text-teal-600", "Goals", "Track your savings"),
+  ("/categories", "categories", "bg-blue-50 text-blue-600", "Categories", "Organize spending"),
+  ("/rules", "rules", "bg-emerald-50 text-emerald-600", "Rules", "Automations"),
+] %}
+{% set tools = [
+  ("/ai/review", "sparkles", "text-emerald-600", "AI activity", "Suggestions & categorizations"),
+  ("/settings?section=data#data", "database", "text-blue-600", "Data & backup", "Export your data"),
+  ("/settings", "settings", "text-base-content/60", "Settings", "Preferences, bank sync, people"),
+] %}
+{% if not ai_enabled %}{% set tools = tools[1:] %}{% endif %}
+
+<div class="flex flex-col gap-5 max-w-2xl mx-auto pb-4">
+
+  <div class="pt-1">
+    <h2 class="text-2xl font-extrabold tracking-tight">More</h2>
+    <p class="text-sm text-base-content/60">Explore your finances and tools</p>
+  </div>
+
+  <!-- The places you open often -->
+  <div class="grid grid-cols-2 gap-3">
+    {% for href, ico, tint, title, desc in tiles %}
+    <a href="{{ href }}" class="kash-card bg-base-100 border border-base-300 shadow-sm rounded-2xl p-4 flex flex-col gap-3 hover:bg-base-200/60 transition-colors">
+      <div class="w-10 h-10 rounded-xl {{ tint }} flex items-center justify-center">{{ icon(ico, "w-5 h-5") }}</div>
+      <div class="min-w-0">
+        <div class="font-bold text-base leading-snug">{{ title }}</div>
+        <div class="text-xs text-base-content/50 truncate">{{ desc }}</div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+
+  <section>
+    <h3 class="px-1 mb-2 text-[0.6875rem] font-bold uppercase tracking-wider text-base-content/50">Activity &amp; tools</h3>
+    <nav class="kash-card bg-base-100 border border-base-300 shadow-sm rounded-2xl overflow-hidden divide-y divide-base-200" aria-label="Activity and tools">
+      {% for href, ico, color, title, desc in tools %}
+      <a href="{{ href }}" class="px-4 py-3.5 flex items-center gap-3.5 hover:bg-base-200/60 transition-colors">
+        <span class="{{ color }} flex-shrink-0">{{ icon(ico, "w-5 h-5") }}</span>
+        <div class="min-w-0 flex-1">
+          <div class="font-semibold text-base leading-snug">{{ title }}</div>
+          <div class="text-xs text-base-content/50 truncate">{{ desc }}</div>
+        </div>
+        <span class="text-base-content/40">{{ icon("chevron-right", "w-4 h-4") }}</span>
+      </a>
+      {% endfor %}
+    </nav>
+  </section>
+
+</div>
+{% endblock %}
