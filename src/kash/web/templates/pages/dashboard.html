@@ -370,186 +370,139 @@ openTxModal('{{ tx.id }}', {{ tx.clean_description | tojson | forceescape }}, {{
 
 {% macro card_net_worth(cls="") -%}
 {% set nw = net_worth %}
-<a href="/accounts" class="{{ cls }} kash-card block p-4 md:p-5 bg-white border border-slate-100 shadow-sm rounded-2xl hover:border-slate-300 hover:shadow-md transition-all cursor-pointer group">
+<a href="/accounts" class="{{ cls }} kash-card block p-5 bg-white border border-slate-100 shadow-sm rounded-2xl hover:border-slate-300 transition-all cursor-pointer group">
   <div class="flex items-center justify-between">
-    <span class="text-xs font-medium text-slate-500 group-hover:text-slate-700 transition-colors">Net worth{% if not range.is_current %} · {{ balance_as_of | day }}{% endif %}</span>
-    <span class="text-[0.625rem] text-slate-400 group-hover:text-emerald-600 font-semibold transition-colors">Accounts ›</span>
+    <span class="text-xs font-medium text-slate-500">Net worth{% if not range.is_current %} · {{ balance_as_of | day }}{% endif %}</span>
+    <span class="text-[0.625rem] text-slate-400 group-hover:text-slate-700 font-semibold transition-colors">Accounts ›</span>
   </div>
   <div class="flex items-end justify-between gap-3">
     <div class="min-w-0">
-      <div class="text-2xl font-extrabold tracking-tight {{ 'text-rose-600' if nw.total < 0 else 'text-slate-900' }} mt-1 mb-1">{{ nw.total | money }}</div>
+      <div class="text-2xl font-extrabold tracking-tight text-slate-900 mt-1 mb-1">{{ nw.total | money }}</div>
       {% if nw.change is not none %}
-      {% set up = nw.change >= 0 %}
-      <div class="text-xs font-semibold {{ 'text-emerald-600' if up else 'text-rose-600' }}">
-        {{ "↑" if up else "↓" }} {{ nw.change | abs | money }}{% if nw.change_pct is not none %} ({{ "{:.1f}".format(nw.change_pct | abs) }}%){% endif %}
-        <span class="font-medium text-slate-400">{{ "this month" if range.is_current else "in " ~ range.month.start.strftime("%B") }}</span>
-      </div>
+      <div class="text-xs font-semibold text-slate-500">{{ "↑" if nw.change >= 0 else "↓" }} {{ nw.change | abs | money }} <span class="font-medium text-slate-400">{{ "this month" if range.is_current else "in " ~ range.month.start.strftime("%B") }}</span></div>
       {% endif %}
     </div>
     {% if nw.chart %}
-    {% set down = nw.change is not none and nw.change < 0 %}
-    <svg viewBox="0 0 100 40" preserveAspectRatio="none" class="w-24 h-12 flex-shrink-0 {{ 'text-rose-500' if down else 'text-emerald-500' }}" aria-hidden="true">
-      <path d="{{ nw.chart.area }}" fill="currentColor" fill-opacity="0.12" />
+    <svg viewBox="0 0 100 40" preserveAspectRatio="none" class="w-24 h-12 flex-shrink-0 text-slate-400" aria-hidden="true">
       <path d="{{ nw.chart.path }}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
     </svg>
     {% endif %}
   </div>
-  <div class="kash-nw-bar" aria-hidden="true">
-    <span style="width: {{ '%.2f' | format(nw.parts[0]) }}%; background:#3b82f6"></span><span style="width: {{ '%.2f' | format(nw.parts[1]) }}%; background:#10b981"></span><span style="width: {{ '%.2f' | format(nw.parts[2]) }}%; background:#f43f5e"></span>
-  </div>
-  <div class="grid grid-cols-3 gap-2 text-xs">
-    <div class="min-w-0"><div class="flex items-center gap-1.5 text-[0.6875rem] text-slate-500"><span class="kash-nw-dot" style="background:#3b82f6"></span>Banking</div><div class="font-bold text-slate-900 truncate">{{ nw.banking | money(0) }}</div></div>
-    <div class="min-w-0"><div class="flex items-center gap-1.5 text-[0.6875rem] text-slate-500"><span class="kash-nw-dot" style="background:#10b981"></span>Investments</div><div class="font-bold text-emerald-600 truncate">{{ nw.investments | money(0) }}</div></div>
-    <div class="min-w-0"><div class="flex items-center gap-1.5 text-[0.6875rem] text-slate-500"><span class="kash-nw-dot" style="background:#f43f5e"></span>Debts</div><div class="font-bold text-rose-500 truncate">{{ (0 - nw.debts) | money(0) }}</div></div>
+  <div class="grid grid-cols-3 gap-2 text-xs pt-3 mt-3 border-t border-slate-100">
+    <div class="min-w-0"><div class="text-[0.6875rem] text-slate-500">Banking</div><div class="font-bold text-slate-900 truncate">{{ nw.banking | money(0) }}</div></div>
+    <div class="min-w-0"><div class="text-[0.6875rem] text-slate-500">Investments</div><div class="font-bold text-slate-900 truncate">{{ nw.investments | money(0) }}</div></div>
+    <div class="min-w-0"><div class="text-[0.6875rem] text-slate-500">Debts</div><div class="font-bold text-slate-900 truncate">{{ (0 - nw.debts) | money(0) }}</div></div>
   </div>
 </a>
 {%- endmacro %}
 
-{% macro mobile_card(id) -%}
-{% if id == "net_worth" %}{{ card_net_worth() }}
-{% elif id == "balance" %}
-<a href="/accounts" class="block kash-hero-card relative overflow-hidden rounded-2xl p-5 hover:ring-2 hover:ring-white/20 transition-all cursor-pointer group">
-  <div class="flex items-center gap-1.5 text-xs font-medium text-slate-400 group-hover:text-white transition-colors">
-    <span>Total Banking Balance{% if not range.is_current %} · {{ balance_as_of | day }}{% endif %}</span>
-    <span class="text-[0.625rem] text-slate-500 group-hover:text-slate-300">View Accounts ›</span>
-  </div>
-  <div class="flex items-end justify-between gap-3">
-    <div class="min-w-0">
-      <div class="text-3xl font-extrabold tracking-tight text-white my-1">
-        {{ banking_balance | money }}
-      </div>
-      {{ balance_change_line(on_dark=true) }}
-    </div>
-    {{ balance_trend("w-24 h-12 flex-shrink-0", on_dark=true) }}
-  </div>
+{# ---------------------------------------------------------------------------
+   Phone cards, calm style: no boxes, thin lines, plain numbers. Color only for
+   a deficit and reminders. Order and choice come from Customize.
+   --------------------------------------------------------------------------- #}
+{% macro calm_change(change) -%}
+{% if change is not none %}<div class="calm-sub">{{ "↑" if change >= 0 else "↓" }} {{ change | abs | money }} {{ "this month" if range.is_current else "in " ~ range.month.start.strftime("%B") }}</div>{% endif %}
+{%- endmacro %}
+{% macro calm_needs_category() -%}
+{% if uncategorized_count %}
+<a href="/transactions?category_id=none&{{ range_query }}" class="calm-row">
+  <span class="flex items-center text-sm"><span class="calm-dot"></span>{{ uncategorized_count }} transaction{{ "s" if uncategorized_count != 1 }} need{{ "s" if uncategorized_count == 1 }} a category</span>
+  <b class="text-xs calm-warn whitespace-nowrap">Review ›</b>
 </a>
-{% elif id == "income_expenses" %}
-{% set compare_name = "Last month" if range.is_current else (compare_label | replace("vs ", "", 1)) %}
-<div class="grid grid-cols-2 gap-3 items-start">
-  <!-- Income Card -->
-  <div class="kash-card rounded-2xl bg-white border border-slate-100 shadow-sm">
-    <a href="/transactions?type=income&{{ range_query }}" class="block px-4 pt-4 group">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center">
-          <span class="kash-circle-badge bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100 transition-colors">
-            {{ icon("arrow-up-right", "w-3.5 h-3.5") }}
-          </span>
-          <span class="text-xs font-semibold text-slate-600 ml-1.5 group-hover:text-emerald-700">Income</span>
-        </div>
-        <span class="text-[0.625rem] text-slate-400 group-hover:text-emerald-600">Filter ›</span>
-      </div>
-      <div class="text-xl font-bold tracking-tight text-slate-900 mt-2 group-hover:text-emerald-700 transition-colors">
-        {{ summary.monthly_income | money }}
-      </div>
-    </a>
-    <div class="px-4">{{ deposits_nudge() }}</div>
-    <details id="income-details" class="kash-card-details px-4 pb-2">
-      <summary class="flex justify-center py-1 cursor-pointer text-slate-400 hover:text-slate-600" aria-label="Income details">
-        {{ icon("chevron-down", "w-4 h-4 kash-chevron") }}
-      </summary>
-      <dl class="border-t border-slate-100 pt-2 pb-1 space-y-1.5 text-[0.6875rem]">
-        <div class="font-semibold">{{ delta(summary.monthly_income_delta_pct) }}</div>
-        <div class="flex justify-between gap-2"><dt class="text-slate-500">{{ compare_name }}</dt><dd class="font-semibold text-slate-700 whitespace-nowrap">{{ summary.compare_income | money }}</dd></div>
-        {% for line in income_lines %}
-        <div class="flex justify-between gap-2"><dt class="text-slate-500 truncate"><a href="/transactions?type=income&category_id={{ line.category_id or 'none' }}&{{ range_query }}" class="hover:text-emerald-700 hover:underline">{{ line.name }}</a></dt><dd class="font-semibold text-slate-700 whitespace-nowrap">{{ line.total | money }}</dd></div>
-        {% endfor %}
-      </dl>
-    </details>
-  </div>
+{% endif %}
+{%- endmacro %}
+{% macro calm_month_select() -%}
+<select aria-label="Month" onchange="kashGo('/?period=' + this.value)" class="calm-select calm-name">
+  {% for value, label in available_periods %}
+  <option value="{{ value }}" {% if value == month.period %}selected{% endif %}>{{ label }}</option>
+  {% endfor %}
+</select>
+{%- endmacro %}
 
-  <!-- Expenses Card -->
-  <div class="kash-card rounded-2xl bg-white border border-slate-100 shadow-sm">
-    <a href="/transactions?type=expense&{{ range_query }}" class="block px-4 pt-4 group">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center">
-          <span class="kash-circle-badge bg-rose-50 text-rose-500 group-hover:bg-rose-100 transition-colors">
-            {{ icon("arrow-down-right", "w-3.5 h-3.5") }}
-          </span>
-          <span class="text-xs font-semibold text-slate-600 ml-1.5 group-hover:text-rose-700">Expenses</span>
-        </div>
-        <span class="text-[0.625rem] text-slate-400 group-hover:text-rose-600">Filter ›</span>
-      </div>
-      <div class="text-xl font-bold tracking-tight text-slate-900 mt-2 group-hover:text-rose-700 transition-colors">
-        {{ summary.monthly_expenses | money }}
-      </div>
-    </a>
-    <details id="expense-details" class="kash-card-details px-4 pb-2">
-      <summary class="flex justify-center py-1 cursor-pointer text-slate-400 hover:text-slate-600" aria-label="Expense details">
-        {{ icon("chevron-down", "w-4 h-4 kash-chevron") }}
-      </summary>
-      <dl class="border-t border-slate-100 pt-2 pb-1 space-y-1.5 text-[0.6875rem]">
-        <div class="font-semibold">{{ delta(summary.monthly_expenses_delta_pct, false) }}</div>
-        <div class="flex justify-between gap-2"><dt class="text-slate-500">{{ compare_name }}</dt><dd class="font-semibold text-slate-700 whitespace-nowrap">{{ summary.compare_expenses | money }}</dd></div>
-        {% if summary.monthly_refunds > 0 %}
-        <div class="flex justify-between gap-2" title="Money back in a spending category (refunds, paybacks) reduces spending"><dt class="text-slate-500">Refunds</dt><dd class="font-semibold text-emerald-600 whitespace-nowrap">{{ (0 - summary.monthly_refunds) | money }}</dd></div>
-        <div class="flex justify-between gap-2"><dt class="text-slate-500">Before refunds</dt><dd class="font-semibold text-slate-700 whitespace-nowrap">{{ (summary.monthly_expenses + summary.monthly_refunds) | money }}</dd></div>
-        {% endif %}
-        {% if dashboard_categories %}
-        {% set top = dashboard_categories[0] %}
-        <div>
-          <div class="flex justify-between gap-2"><dt class="text-slate-500">Top category</dt><dd class="font-semibold text-slate-700 whitespace-nowrap">{{ top.total | money }}</dd></div>
-          <div class="text-slate-400 truncate">{{ top.name }}</div>
-        </div>
-        {% endif %}
-      </dl>
-    </details>
+{% macro mobile_card(id) -%}
+{% if id == "balance" %}
+<section data-calm-balance>
+  <div class="calm-seg" role="tablist" aria-label="Show">
+    <button type="button" role="tab" aria-selected="true" data-show="bank">Banking</button>
+    <button type="button" role="tab" aria-selected="false" data-show="worth">Net worth</button>
   </div>
-</div>
+  <a href="/accounts" data-panel="bank" class="block pt-4">
+    <div class="calm-label">{% if range.is_current %}Available in your bank accounts{% else %}In your bank accounts on {{ balance_as_of | day }}{% endif %}</div>
+    <div class="calm-big">{{ banking_balance | money }}</div>
+    {{ calm_change(balance_change) }}
+  </a>
+  <a href="/accounts" data-panel="worth" class="hidden pt-4">
+    <div class="calm-label">Net worth{% if not range.is_current %} on {{ balance_as_of | day }}{% endif %}</div>
+    <div class="calm-big">{{ net_worth.total | money }}</div>
+    {{ calm_change(net_worth.change) }}
+    <div class="calm-meta mt-2">Banking {{ net_worth.banking | money(0) }} · Investments {{ net_worth.investments | money(0) }} · Debts {{ (0 - net_worth.debts) | money(0) }}</div>
+  </a>
+</section>
+{% elif id == "net_worth" %}
+<a href="/accounts" class="block">
+  <div class="calm-label">Net worth{% if not range.is_current %} on {{ balance_as_of | day }}{% endif %}</div>
+  <div class="calm-mid mt-1">{{ net_worth.total | money }}</div>
+  {{ calm_change(net_worth.change) }}
+  <div class="calm-meta mt-2">Banking {{ net_worth.banking | money(0) }} · Investments {{ net_worth.investments | money(0) }} · Debts {{ (0 - net_worth.debts) | money(0) }}</div>
+</a>
 {% elif id == "net_flow" %}
-<div class="flex items-center justify-center -mt-1 pb-0.5">
-  <a href="/transactions?{{ range_query }}" class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-semibold hover:scale-105 transition-all cursor-pointer {% if summary.monthly_surplus >= 0 %}bg-emerald-50 text-emerald-700 border border-emerald-100 hover:bg-emerald-100{% else %}bg-rose-50 text-rose-700 border border-rose-100 hover:bg-rose-100{% endif %}" title="View all transactions in this period">
-    <span>{% if summary.monthly_surplus >= 0 %}↑ {{ summary.monthly_surplus | money(sign=True) }} Surplus {{ period_phrase }}{% else %}↓ {{ summary.monthly_surplus | abs | money }} Deficit {{ period_phrase }}{% endif %}</span>
-    <span class="text-[0.625rem] opacity-70">›</span>
+{% set left = summary.monthly_surplus %}
+<div class="calm-list calm-band">
+  <div class="calm-row">
+    {{ calm_month_select() }}
+    <a href="/transactions?{{ range_query }}" class="text-sm whitespace-nowrap" title="Money in and out {{ period_phrase }}">
+      <span class="calm-muted">In</span> <b>{{ summary.monthly_income | money(0) }}</b>
+      <span class="calm-faint">·</span> <span class="calm-muted">Out</span> <b>{{ summary.monthly_expenses | money(0) }}</b>
+      <span class="calm-faint">·</span> <b class="{{ 'calm-neg' if left < 0 }}">{{ left | money(0, sign=True) }}</b>
+    </a>
+  </div>
+  {{ calm_needs_category() }}
+</div>
+{% elif id == "income_expenses" %}
+<div class="grid grid-cols-2 calm-band">
+  <a href="/transactions?type=income&{{ range_query }}" class="block py-3 pr-3">
+    <div class="calm-label">Money in</div>
+    <div class="calm-mid mt-0.5">{{ summary.monthly_income | money }}</div>
+    {{ deposits_nudge() }}
+  </a>
+  <a href="/transactions?type=expense&{{ range_query }}" class="block py-3 pl-3" style="border-left: 1px solid var(--calm-line)">
+    <div class="calm-label">Money out</div>
+    <div class="calm-mid mt-0.5">{{ summary.monthly_expenses | money }}</div>
+    {% if summary.monthly_refunds > 0 %}<div class="calm-meta">after {{ summary.monthly_refunds | money(0) }} refunds</div>{% endif %}
   </a>
 </div>
 {% elif id == "budget" %}
-<a href="/budget" class="block kash-card p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:border-slate-200 transition-colors">
-  <div class="flex items-center justify-between mb-2">
-    <span class="font-bold text-sm text-slate-900">Budget</span>
-    <span class="text-slate-400 text-xs">›</span>
-  </div>
-  <!-- Progress Bar -->
-  <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden my-2.5">
-    <div class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: {{ "{:.1f}".format(budget_pct) }}%;"></div>
-  </div>
-  <div class="flex items-center justify-between text-xs">
+<div>
+  <div class="calm-head"><span>Budget</span><a href="/budget">Details ›</a></div>
+  <a href="/budget" class="block py-1">
     {% if summary.budget_total_budgeted > 0 %}
-    <span class="text-slate-500 font-medium">{{ summary.budget_remaining | money }} remaining</span>
-    <span class="font-bold text-slate-700">{{ "{:.0f}".format(summary.budget_pct_used) }}%</span>
+    <div class="flex items-baseline justify-between gap-3">
+      <span class="calm-name">{{ summary.budget_remaining | money }} left</span>
+      <span class="calm-sub">{{ "{:.0f}".format(summary.budget_pct_used) }}% used</span>
+    </div>
+    <div class="calm-bar mt-2"><i class="{{ 'over' if summary.budget_pct_used > 100 }}" style="width: {{ '%.1f' | format(budget_pct) }}%"></i></div>
     {% else %}
-    <span class="text-slate-500 font-medium">No budget set for this month</span>
-    <span class="font-semibold text-emerald-600">Set up ›</span>
+    <div class="flex items-center justify-between gap-3"><span class="text-sm calm-muted">No budget set for this month</span><span class="calm-link">Set up ›</span></div>
     {% endif %}
-  </div>
-</a>
+  </a>
+</div>
 {% elif id == "recent" %}
-<div class="space-y-2.5 pt-1">
-  <div class="flex items-center justify-between px-1">
-    <h3 class="font-bold text-base text-slate-900">Recent Transactions</h3>
-    <a href="/transactions" class="text-xs font-semibold text-emerald-600 hover:text-emerald-700">View all</a>
-  </div>
-
-  <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl divide-y divide-slate-100 overflow-hidden">
+<div>
+  <div class="calm-head"><span>Recent</span><a href="/transactions">See all ›</a></div>
+  <div class="calm-list">
     {% for tx in recent_transactions %}
-    <div role="button" tabindex="0" onclick="{{ tx_click(tx) }}" onkeydown="if (event.key === 'Enter') this.click()" title="View details, set category, or create a rule" class="p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer">
-      <div class="flex items-center gap-3">
-        {{ merchant_box(transaction_icon(tx), "receipt" if tx.amount < 0 else "bank", fallback_class="bg-slate-100 text-slate-700" if tx.amount < 0 else "bg-emerald-100 text-emerald-600") }}
-        <div>
-          <div class="font-bold text-sm text-slate-900 leading-snug">{{ tx.clean_description }}</div>
-          <div class="text-xs text-slate-400">{{ tx.merchant_name or tx.date | fulldate }}</div>
+    <div role="button" tabindex="0" onclick="{{ tx_click(tx) }}" onkeydown="if (event.key === 'Enter') this.click()" title="View details, set category, or create a rule" class="calm-row">
+      <div class="flex items-center gap-3 min-w-0">
+        {{ merchant_box(transaction_icon(tx), "receipt" if tx.amount < 0 else "bank", box="calm-icon", fallback_class="", icon_class="w-4 h-4") }}
+        <div class="min-w-0">
+          <div class="calm-name truncate">{{ tx.clean_description }}</div>
+          <div class="calm-meta">{{ tx.date | day }}{% if tx.is_pending %} · pending{% endif %}</div>
         </div>
       </div>
-      <div class="text-right">
-        <div class="font-bold text-sm {% if tx.amount < 0 %}text-rose-500{% else %}text-emerald-600{% endif %}">
-          {{ tx.amount | money(sign=True) }}
-        </div>
-        <div class="text-[0.6875rem] text-slate-400">{{ tx.date | day }}</div>
-      </div>
+      <div class="calm-amount">{{ tx.amount | money(sign=True) }}</div>
     </div>
     {% else %}
-    <div class="p-5 text-center text-xs text-slate-400">
-      No recent transactions found.
-    </div>
+    <div class="calm-row text-xs calm-muted">No recent transactions.</div>
     {% endfor %}
   </div>
 </div>
@@ -581,50 +534,67 @@ openTxModal('{{ tx.id }}', {{ tx.clean_description | tojson | forceescape }}, {{
 {%- endmacro %}
 
 <!-- ======================================================================
-     MOBILE VIEW
+     MOBILE VIEW (calm: no cards)
      ====================================================================== -->
-<div class="md:hidden space-y-4 pb-4">
-  <!-- Mobile Top Header: Greeting & Action Icons -->
-  <div class="flex items-center justify-between pt-1 pb-1">
+{% set mobile_ids = layouts.mobile | map(attribute="id") | list %}
+<div class="md:hidden calm calm-stack pb-4">
+  <div class="flex items-center justify-between pt-1">
     <div>
       {% set user_name = request.state.user_name | default("") %}
       {% if user_name %}
-      <div class="text-xs font-medium text-slate-500">{{ greeting }},</div>
-      <div class="text-2xl font-extrabold text-slate-900 tracking-tight leading-tight">{{ user_name }}</div>
+      <div class="calm-label">{{ greeting }},</div>
+      <div class="calm-title">{{ user_name }}</div>
       {% else %}
-      <div class="text-2xl font-extrabold text-slate-900 tracking-tight leading-tight">{{ greeting }}</div>
+      <div class="calm-title">{{ greeting }}</div>
       {% endif %}
     </div>
-    <div class="flex items-center gap-2.5">
-      {{ customize_button(false) }}
-      <a href="/transactions" class="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors">
-        {{ icon("search", "w-4 h-4") }}
-      </a>
-      <a href="/settings" class="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors">
-        {{ icon("settings", "w-4 h-4") }}
-      </a>
+    <div class="flex items-center gap-2">
+      <a href="/transactions" class="calm-round" aria-label="Search transactions">{{ icon("search", "w-4 h-4") }}</a>
+      <a href="/settings" class="calm-round" aria-label="Settings">{{ icon("settings", "w-4 h-4") }}</a>
     </div>
   </div>
 
-  <div class="flex items-center justify-end -mt-1">
-    {{ month_nav() }}
+  {% if "net_flow" not in mobile_ids %}
+  <!-- No "This month" row on this dashboard: the month picker and reminder go here -->
+  <div class="calm-list calm-band">
+    <div class="calm-row">{{ calm_month_select() }}<span class="calm-meta">{{ period_phrase | capitalize }}</span></div>
+    {{ calm_needs_category() }}
   </div>
-
-  {{ needs_category_banner() }}
+  {% endif %}
 
   {% set compare_name = "Last month" if range.is_current else (compare_label | replace("vs ", "", 1)) %}
   {% for placed in layouts.mobile %}
   {{ mobile_card(placed.id) }}
   {% else %}
-  <div class="kash-card p-6 text-center text-xs text-slate-400 bg-white border border-slate-100 rounded-2xl">Your dashboard has no cards.</div>
+  <p class="text-center text-xs calm-muted py-6">Your dashboard has no cards.</p>
   {% endfor %}
 
-  <div class="flex justify-center pt-2">
-    <button type="button" onclick="kashCustomize.open()" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors">
+  <div class="flex justify-center">
+    <button type="button" onclick="kashCustomize.open()" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold calm-muted hover:bg-slate-100 transition-colors">
       {{ icon("sliders", "w-3.5 h-3.5") }} Customize dashboard
     </button>
   </div>
 </div>
+
+<script>
+  // Balance: Banking or Net worth. Remembered on this device (if storage works).
+  document.querySelectorAll("[data-calm-balance]").forEach(root => {
+    const show = which => {
+      root.querySelectorAll("[data-show]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.show === which)));
+      root.querySelectorAll("[data-panel]").forEach(p => {
+        p.classList.toggle("hidden", p.dataset.panel !== which);
+        p.classList.toggle("block", p.dataset.panel === which);
+      });
+    };
+    let saved = null;
+    try { saved = localStorage.getItem("kash-balance-view"); } catch (e) {}
+    if (saved === "worth") show("worth");
+    root.querySelectorAll("[data-show]").forEach(b => b.addEventListener("click", () => {
+      show(b.dataset.show);
+      try { localStorage.setItem("kash-balance-view", b.dataset.show); } catch (e) {}
+    }));
+  });
+</script>
 
 <!-- ======================================================================
      DESKTOP VIEW

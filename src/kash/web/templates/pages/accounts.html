@@ -2,151 +2,118 @@
 
 {% block title %}Accounts - Kash{% endblock %}
 
-{% macro cash_flow_badge(acc) -%}
-{% if acc.cash_flow.value == "income" %}<span class="badge badge-xs bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold text-[0.625rem]" title="Only money in with an Income category counts toward income">Income only</span>
-{% elif acc.cash_flow.value == "none" %}<span class="badge badge-xs bg-slate-100 text-slate-500 border-slate-200 font-semibold text-[0.625rem]" title="Not counted in income, spending, budgets or reports; still in net worth">Not in income &amp; spending</span>{% endif %}
+{# Calm layout (app.css "Calm layout"): no boxes, thin lines, plain numbers. Editing,
+   pausing and bank connections are in Settings › Accounts & bank sync. #}
+{% macro cash_flow_note(acc) -%}
+{% if acc.cash_flow.value == "income" %} · income only{% elif acc.cash_flow.value == "none" %} · not in income &amp; spending{% endif %}
 {%- endmacro %}
 {% macro balance_date(acc) -%}
-{% if acc.connection_id %}<div class="text-[0.6875rem] text-slate-400 mt-0.5" title="When the bank last reported this balance to SimpleFIN">{% if acc.balance_as_of %}as of <span class="whitespace-nowrap">{{ acc.balance_as_of | day }},</span> <span class="whitespace-nowrap">{{ acc.balance_as_of | clock }}</span>{% else %}balance date unknown{% endif %}</div>{% endif %}
+{% if acc.connection_id %}<div class="calm-meta" title="When the bank last reported this balance to SimpleFIN">{% if acc.balance_as_of %}as of {{ acc.balance_as_of | day }}, {{ acc.balance_as_of | clock }}{% else %}balance date unknown{% endif %}</div>{% endif %}
 {%- endmacro %}
-{# Under the amount; on phones under the account name, where it has room to wrap #}
-{% macro pending_note(acc, posted, amount, classes) -%}
-{% if acc.connection_id and amount %}<div class="{{ classes }} text-[0.6875rem] text-slate-400 mt-0.5" title="Your bank's balance leaves out transactions that haven't posted yet; the balance shown includes them"><span class="whitespace-nowrap">{{ posted | money }} posted</span> · <span class="whitespace-nowrap">{{ amount | money }} pending</span></div>{% endif %}
+{% macro pending_note(acc, posted, amount) -%}
+{% if acc.connection_id and amount %}<div class="calm-meta" title="Your bank's balance leaves out transactions that haven't posted yet; the balance shown includes them">{{ posted | money }} posted · {{ amount | money }} pending</div>{% endif %}
 {%- endmacro %}
+
 {% block content %}
-{# One account row. Tapping it opens its transactions. ``amount`` is the shown balance,
-   ``posted`` the bank's own (for the pending note), ``net`` this month's surplus or
-   deficit (banking only). Editing, pausing and bank connections are in
-   Settings › Accounts & bank sync. #}
-{% macro account_row(acc, ico, tint, amount, amount_class, posted, net=none) -%}
-<a href="/transactions?account_id={{ acc.id }}" class="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/50 transition-colors" title="Show {{ acc.name }} transactions">
+{# One account. Tapping it opens its transactions. ``net`` is this month's surplus or
+   deficit (bank accounts only). #}
+{% macro account_row(acc, ico, amount, posted, net=none) -%}
+<a href="/transactions?account_id={{ acc.id }}" class="calm-row" title="Show {{ acc.name }} transactions">
   <div class="flex items-center gap-3 min-w-0 flex-1">
-    <div class="kash-icon-box rounded-xl {{ tint }}">{{ icon(ico, "w-5 h-5") }}</div>
+    <div class="calm-icon">{{ icon(ico, "w-4 h-4") }}</div>
     <div class="min-w-0">
-      <div class="flex items-center gap-2 flex-wrap">
-        <span class="font-bold text-sm text-slate-900 leading-snug">{{ acc.name }}</span>
-        {{ cash_flow_badge(acc) }}
-      </div>
-      <div class="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
-        <span>{% if acc.mask %}••••&nbsp;{{ acc.mask }}{% else %}{{ acc.account_type.replace('_', ' ').capitalize() }}{% endif %}</span>
-        {% if acc.mask %}<span class="hidden sm:inline">•</span><span class="hidden sm:inline capitalize">{{ acc.account_type.replace('_', ' ') }}</span>{% endif %}
-      </div>
-      {{ pending_note(acc, posted, pending.get(acc.id), "sm:hidden") }}
+      <div class="calm-name">{{ acc.name }}</div>
+      <div class="calm-meta">{% if acc.mask %}••••&nbsp;{{ acc.mask }} · {% endif %}{{ acc.account_type.replace('_', ' ').capitalize() }}{{ cash_flow_note(acc) }}</div>
+      {{ pending_note(acc, posted, pending.get(acc.id)) }}
       {{ balance_date(acc) }}
     </div>
   </div>
   <div class="flex items-center gap-2 flex-shrink-0">
     <div class="text-right">
-      <div class="font-bold text-sm {{ amount_class }}">{{ amount | money }}</div>
+      <div class="calm-amount">{{ amount | money }}</div>
       {% if net is not none %}
-      {% set up = net >= 0 %}
-      <div class="mt-1"><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.6875rem] font-semibold whitespace-nowrap {{ 'bg-emerald-50 text-emerald-700' if up else 'bg-rose-50 text-rose-700' }}" title="Income minus spending in {{ month_label }} so far (transfers between your accounts left out)">{{ "▲" if up else "▼" }} {{ net | money(sign=True) }} {{ "surplus" if up else "deficit" }}</span></div>
+      <div class="text-xs font-semibold mt-0.5 whitespace-nowrap {{ 'calm-muted' if net >= 0 else 'calm-neg' }}" title="Income minus spending in {{ month_label }} so far (transfers between your accounts left out)">{{ net | money(sign=True) }} {{ "surplus" if net >= 0 else "deficit" }}</div>
       {% endif %}
-      {{ pending_note(acc, posted, pending.get(acc.id), "hidden sm:block") }}
     </div>
-    <span class="text-slate-300">{{ icon("chevron-right", "w-4 h-4") }}</span>
+    <span class="calm-faint">{{ icon("chevron-right", "w-4 h-4") }}</span>
   </div>
 </a>
 {%- endmacro %}
 {# A group you tap to open. Closed every time you come to the page (see the script). #}
-{% macro collapsible(id, ico, tint, title, count, total, total_class, empty) -%}
-<details id="{{ id }}" data-kash-collapse class="kash-card kash-card-details bg-white border border-slate-100 shadow-sm rounded-2xl overflow-hidden">
-  <summary class="p-3.5 flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-50/50 transition-colors">
-    <span class="flex items-center gap-3 min-w-0">
-      <span class="kash-icon-box rounded-xl {{ tint }}">{{ icon(ico, "w-5 h-5") }}</span>
-      <span class="min-w-0">
-        <span class="flex items-center gap-2"><span class="font-bold text-sm text-slate-900">{{ title }}</span><span class="badge badge-xs bg-slate-100 text-slate-500 border-slate-200 font-semibold text-[0.625rem]">{{ count }}</span></span>
-        <span class="block text-xs text-slate-400 mt-0.5">Tap to show</span>
-      </span>
+{% macro collapsible(id, title, count, total, empty) -%}
+<details id="{{ id }}" data-kash-collapse class="calm-fold calm-band">
+  <summary class="calm-row">
+    <span class="flex items-center gap-2">
+      <span class="calm-name">{{ title }}</span>
+      <span class="calm-meta" style="margin:0">{{ count }}</span>
     </span>
     <span class="flex items-center gap-2 flex-shrink-0">
-      <span class="font-bold text-sm {{ total_class }}">{{ total | money }}</span>
-      <span class="text-slate-400">{{ icon("chevron-down", "w-4 h-4 kash-chevron") }}</span>
+      <span class="calm-amount">{{ total | money }}</span>
+      <span class="calm-faint calm-chev">{{ icon("chevron-down", "w-4 h-4") }}</span>
     </span>
   </summary>
-  <div class="border-t border-slate-100 divide-y divide-slate-100">
+  <div class="calm-list calm-rule calm-indent">
     {{ caller() }}
-    {% if not count %}<div class="p-4 text-center text-xs text-slate-400">{{ empty }}</div>{% endif %}
+    {% if not count %}<div class="calm-row text-xs calm-muted">{{ empty }}</div>{% endif %}
   </div>
 </details>
 {%- endmacro %}
 
-<div class="space-y-5 max-w-4xl mx-auto pb-6">
+<div class="calm max-w-2xl mx-auto pb-6">
 
-  <!-- Top bar: account settings live in Settings -->
-  <div class="flex items-center justify-between pt-1 pb-1">
+  <div class="flex items-center justify-between pt-1">
     <div>
-      <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Accounts</h2>
-      <p class="text-xs text-slate-400 mt-0.5">Net worth and bank balances</p>
+      <div class="calm-title">Accounts</div>
+      <div class="calm-label">Net worth and bank balances</div>
     </div>
-    <a href="/settings?section=accounts" class="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" title="Accounts &amp; bank sync settings" aria-label="Accounts and bank sync settings">
-      {{ icon("settings", "w-4 h-4") }}
-    </a>
+    <a href="/settings?section=accounts" class="calm-round" title="Accounts &amp; bank sync settings" aria-label="Accounts and bank sync settings">{{ icon("settings", "w-4 h-4") }}</a>
   </div>
 
-  <!-- Hero Net Worth & Assets Overview Card -->
-  <div class="kash-hero-card relative overflow-hidden rounded-2xl p-5 text-white">
-    <div class="text-xs font-medium text-slate-400">Total Net Worth</div>
-    <div class="text-3xl font-extrabold tracking-tight text-white my-1">
-      {{ total_net_worth | money }}
-    </div>
-    <div class="grid grid-cols-3 gap-2 pt-3 mt-3 border-t border-white/10 text-xs">
-      <div>
-        <div class="text-[0.6875rem] text-slate-400 font-medium">Banking & Cash</div>
-        <div class="text-sm font-bold text-white mt-0.5">{{ total_banking | money }}</div>
-      </div>
-      <div class="border-l border-white/10 pl-3">
-        <div class="text-[0.6875rem] text-slate-400 font-medium">Investments</div>
-        <div class="text-sm font-bold text-emerald-300 mt-0.5">{{ total_investments | money }}</div>
-      </div>
-      <div class="border-l border-white/10 pl-3">
-        <div class="text-[0.6875rem] text-slate-400 font-medium">Liabilities</div>
-        <div class="text-sm font-bold text-rose-300 mt-0.5">{{ total_liabilities | money }}</div>
-      </div>
+  <!-- Net worth -->
+  <div class="pt-6">
+    <div class="calm-label">Net worth</div>
+    <div class="calm-big">{{ total_net_worth | money }}</div>
+    <div class="grid grid-cols-3 gap-3 pt-4 mt-4 calm-rule">
+      <div><div class="calm-label">Banking</div><div class="calm-amount mt-0.5">{{ total_banking | money(0) }}</div></div>
+      <div><div class="calm-label">Investments</div><div class="calm-amount mt-0.5">{{ total_investments | money(0) }}</div></div>
+      <div><div class="calm-label">Debts</div><div class="calm-amount mt-0.5">{{ (0 - total_liabilities) | money(0) }}</div></div>
     </div>
   </div>
 
   {% if connections_attention %}
-  <a href="/settings?section=accounts" class="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 transition-colors">
-    <span class="flex items-center gap-2.5 text-xs font-semibold">
-      <span class="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0"></span>
-      A bank connection needs your attention
-    </span>
-    <span class="text-xs font-bold whitespace-nowrap">Settings ›</span>
+  <a href="/settings?section=accounts" class="calm-nudge mt-6">
+    <span class="flex items-center"><span class="calm-dot"></span>A bank connection needs your attention</span>
+    <b class="text-xs">Settings ›</b>
   </a>
   {% endif %}
 
-  <!-- Cash & Banking: always open -->
-  <div class="space-y-2">
-    <div class="flex items-center justify-between px-1">
-      <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Cash & Banking ({{ banking_accounts | length }})</h3>
-      <span class="text-xs font-semibold text-slate-600">{{ total_banking | money }}</span>
-    </div>
-    <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl divide-y divide-slate-100 overflow-hidden">
-      {% for acc in banking_accounts %}
-      {% set tint = 'bg-blue-100 text-blue-600' if acc.account_type == 'checking' else ('bg-cyan-100 text-cyan-600' if acc.account_type == 'savings' else 'bg-slate-100 text-slate-600') %}
-      {{ account_row(acc, "bank", tint, balances[acc.id], 'text-rose-500' if balances[acc.id] < 0 else 'text-slate-900', acc.current_balance, month_net.get(acc.id)) }}
-      {% else %}
-      <div class="p-4 text-center text-xs text-slate-400">No banking accounts yet. <a href="/settings?section=accounts" class="font-semibold text-emerald-600 hover:underline">Add one in Settings</a></div>
-      {% endfor %}
-    </div>
+  <!-- Cash & banking: always open -->
+  <div class="calm-head"><span>Cash &amp; banking</span><span>{{ total_banking | money }}</span></div>
+  <div class="calm-list calm-band">
+    {% for acc in banking_accounts %}
+    {{ account_row(acc, "bank", balances[acc.id], acc.current_balance, month_net.get(acc.id)) }}
+    {% else %}
+    <div class="calm-row text-xs calm-muted">No bank accounts yet. <a href="/settings?section=accounts" class="calm-link">Add one in Settings ›</a></div>
+    {% endfor %}
   </div>
 
-  <!-- Investments and Liabilities: tap to open -->
-  {% call collapsible("acc-investments", "trending-up", "bg-emerald-100 text-emerald-600", "Investments", investment_accounts | length, total_investments, "text-emerald-600", "No investment accounts linked.") %}
+  <!-- Investments and debts: tap to open -->
+  <div class="calm-head"><span>Other accounts</span><span></span></div>
+  {% call collapsible("acc-investments", "Investments", investment_accounts | length, total_investments, "No investment accounts.") %}
     {% for acc in investment_accounts %}
-    {{ account_row(acc, "trending-up", "bg-emerald-100 text-emerald-600", balances[acc.id], "text-emerald-600", acc.current_balance) }}
+    {{ account_row(acc, "trending-up", balances[acc.id], acc.current_balance) }}
     {% endfor %}
   {% endcall %}
-
-  {% call collapsible("acc-liabilities", "credit-card", "bg-slate-800 text-white", "Liabilities & Credit", liability_accounts | length, 0 - total_liabilities, "text-rose-500", "No liability accounts linked.") %}
+  <div style="margin-top:-1px">
+  {% call collapsible("acc-liabilities", "Liabilities & credit", liability_accounts | length, 0 - total_liabilities, "No credit cards or loans.") %}
     {% for acc in liability_accounts %}
-    {{ account_row(acc, "credit-card", "bg-slate-800 text-white", 0 - balances[acc.id] | abs, "text-rose-500", 0 - acc.current_balance | abs) }}
+    {{ account_row(acc, "credit-card", 0 - balances[acc.id] | abs, 0 - acc.current_balance | abs) }}
     {% endfor %}
   {% endcall %}
+  </div>
 
   {% if paused_count %}
-  <p class="text-center text-xs text-slate-400">{{ paused_count }} paused account{{ "s" if paused_count != 1 }} not shown · <a href="/settings?section=accounts" class="font-semibold text-emerald-600 hover:underline">Manage</a></p>
+  <p class="text-center text-xs calm-faint pt-6">{{ paused_count }} paused account{{ "s" if paused_count != 1 }} not shown · <a href="/settings?section=accounts" class="calm-link">Manage</a></p>
   {% endif %}
 
 </div>

@@ -51,136 +51,101 @@
 
 {% block content %}
 {% from "components/merchant_icon.html" import merchant_box %}
-<div class="space-y-4 max-w-4xl mx-auto pb-4">
+{# Calm layout (app.css "Calm layout"): no boxes, thin lines, plain numbers; color only
+   for overdue, due soon and price changes. #}
+<div class="calm max-w-2xl mx-auto pb-4">
 
-  <div class="flex items-center justify-between pt-1 pb-1">
-    <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Bills</h2>
+  <div class="flex items-center justify-between pt-1">
+    <div class="calm-title">Bills</div>
     <div class="flex items-center gap-2">
       <form method="post" action="/bills/scan">
-        <button type="submit" class="h-9 px-3 rounded-full bg-white border border-slate-200 flex items-center gap-1.5 text-xs font-semibold text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" title="Look through your transactions for recurring bills">
-          {{ icon("search", "w-3.5 h-3.5") }}
-          <span>Scan history</span>
-        </button>
+        <button type="submit" class="calm-btn h-9" title="Look through your transactions for recurring bills">{{ icon("search", "w-3.5 h-3.5") }}<span>Scan history</span></button>
       </form>
-      <button onclick="add_bill_modal.showModal()" class="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" title="Add a bill">
-        {{ icon("plus", "w-4 h-4") }}
-      </button>
+      <button onclick="add_bill_modal.showModal()" class="calm-round" title="Add a bill" aria-label="Add a bill">{{ icon("plus", "w-4 h-4") }}</button>
     </div>
   </div>
 
   <!-- This month's bills: paid so far vs. still to pay -->
   {% if progress.items %}
-  <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl p-4 md:p-5 space-y-3">
-    <div class="flex items-start justify-between gap-3">
-      <div>
-        <div class="text-xs font-medium text-slate-500">{{ progress.month_start.strftime("%B") }} bills</div>
-        <div class="text-2xl font-extrabold text-slate-900 tracking-tight leading-snug">
-          {{ money(progress.paid) }} <span class="text-sm font-semibold text-slate-400">paid of {{ money(progress.total) }}</span>
-        </div>
-      </div>
-      <div class="text-right">
-        <div class="text-xs font-medium text-slate-500">Left to pay</div>
-        <div class="text-lg font-bold {% if progress.overdue %}text-rose-600{% else %}text-slate-900{% endif %}">{{ money(progress.remaining) }}</div>
-      </div>
-    </div>
-
-    <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden" role="progressbar" aria-valuenow="{{ progress.pct_paid }}" aria-valuemin="0" aria-valuemax="100" aria-label="Bills paid this month">
-      <div class="h-full rounded-full bg-emerald-500 transition-all duration-500" style="width: {{ progress.pct_paid }}%;"></div>
-    </div>
-
-    <div class="flex items-center justify-between text-[0.6875rem] text-slate-500">
-      <span>{{ progress.paid_count }} of {{ progress.items | length }} paid · {{ progress.pct_paid }}%</span>
-      {% if progress.overdue %}<span class="text-rose-600 font-semibold">{{ money(progress.overdue) }} overdue</span>{% endif %}
-    </div>
-
-    <details id="due-this-month" class="text-xs">
-      <summary class="cursor-pointer font-semibold text-emerald-700 hover:text-emerald-800 select-none">See all {{ progress.items | length }} due this month</summary>
-      <div class="mt-2 divide-y divide-slate-100">
-        {% for item in progress.items %}
-        <div class="py-2 flex items-center justify-between gap-3">
-          <div class="flex items-center gap-2 min-w-0">
-            {% if item.status == "paid" %}
-            <span class="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0">{{ icon("check", "w-3 h-3") }}</span>
-            {% elif item.status == "overdue" %}
-            <span class="w-5 h-5 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0 text-[0.6875rem] font-bold">!</span>
-            {% else %}
-            <span class="w-5 h-5 rounded-full border-2 border-slate-200 flex-shrink-0"></span>
-            {% endif %}
-            <span class="font-semibold text-slate-800 truncate">{{ item.bill.name }}</span>
-            <span class="text-slate-400 whitespace-nowrap">{{ item.due_date | day }}</span>
-          </div>
-          <div class="flex items-center gap-2 flex-shrink-0">
-            <span class="font-bold {% if item.status == 'paid' %}text-emerald-600{% elif item.status == 'overdue' %}text-rose-600{% else %}text-slate-900{% endif %}">
-              {% if item.status != "paid" and item.bill.is_variable_amount %}≈ {% endif %}{{ money(item.amount) }}
-            </span>
-            {% if item.status != "paid" and item.occurrence_id %}
-            <form method="post" action="/bills/occurrences/{{ item.occurrence_id }}/paid">
-              <button type="submit" class="px-2 py-0.5 text-[0.6875rem] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-md transition-colors">Mark paid</button>
-            </form>
-            {% endif %}
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-    </details>
+  <div class="pt-6">
+    <div class="calm-label">{{ progress.month_start.strftime("%B") }} bills · left to pay</div>
+    <div class="calm-big">{{ money(progress.remaining) }}</div>
+    <div class="calm-sub">{{ money(progress.paid) }} paid of {{ money(progress.total) }} · {{ progress.paid_count }} of {{ progress.items | length }} bills</div>
+    <div class="calm-bar mt-3" role="progressbar" aria-valuenow="{{ progress.pct_paid }}" aria-valuemin="0" aria-valuemax="100" aria-label="Bills paid this month"><i style="width: {{ progress.pct_paid }}%"></i></div>
+    {% if progress.overdue %}<div class="text-xs font-semibold calm-neg mt-2">{{ money(progress.overdue) }} overdue</div>{% endif %}
   </div>
+
+  <details id="due-this-month" class="calm-fold calm-band mt-5">
+    <summary class="calm-row">
+      <span class="text-sm font-semibold">All {{ progress.items | length }} due this month</span>
+      <span class="calm-faint calm-chev">{{ icon("chevron-down", "w-4 h-4") }}</span>
+    </summary>
+    <div class="calm-list calm-rule">
+      {% for item in progress.items %}
+      <div class="calm-row">
+        <div class="flex items-center gap-3 min-w-0">
+          {% if item.status == "paid" %}<span class="calm-status done">{{ icon("check", "w-3 h-3") }}</span>
+          {% elif item.status == "overdue" %}<span class="calm-status late">!</span>
+          {% else %}<span class="calm-status"></span>{% endif %}
+          <div class="min-w-0">
+            <div class="calm-name truncate {{ 'calm-muted' if item.status == 'paid' }}">{{ item.bill.name }}</div>
+            <div class="calm-meta {{ 'calm-neg' if item.status == 'overdue' }}">{{ item.due_date | day }}{% if item.status == "paid" %} · paid{% elif item.status == "overdue" %} · overdue{% endif %}</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <span class="calm-amount {{ 'calm-muted' if item.status == 'paid' }}">{% if item.status != "paid" and item.bill.is_variable_amount %}≈ {% endif %}{{ money(item.amount) }}</span>
+          {% if item.status != "paid" and item.occurrence_id %}
+          <form method="post" action="/bills/occurrences/{{ item.occurrence_id }}/paid">
+            <button type="submit" class="calm-btn">Paid</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </details>
   {% endif %}
 
   <!-- Detected bills to review -->
   {% if candidates %}
-  <div id="detection-banner" class="kash-card p-4 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-3">
-    <div class="flex items-start gap-3">
-      <div class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 mt-0.5 shadow-xs">
-        {{ icon("zap", "w-4 h-4") }}
-      </div>
-      <div>
-        <h4 class="font-bold text-sm text-slate-900">We found {{ candidates | length }} possible recurring bill{{ "s" if candidates | length != 1 }}</h4>
-        <p class="text-xs text-slate-500">Found in your transactions. Add the ones that are real bills; dismissed ones won't be suggested again.</p>
-      </div>
-    </div>
-
-    <div class="space-y-2">
+  <div id="detection-banner">
+    <div class="calm-head"><span>Found in your transactions</span><span>{{ candidates | length }}</span></div>
+    <p class="calm-meta pb-2">Add the ones that are real bills; dismissed ones won't be suggested again.</p>
+    <div class="calm-list calm-band">
       {% for c in candidates %}
-      <div id="candidate-{{ c.id }}" class="p-3 bg-white rounded-xl border border-slate-200/80 shadow-xs space-y-2">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <div id="candidate-{{ c.id }}" class="py-3 space-y-2">
+        <div class="flex items-center justify-between gap-3">
           <div class="min-w-0 flex items-center gap-3">
-          {{ merchant_box(merchant_icon(c.merchant_name), "calendar", box="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0", fallback_class="bg-emerald-50 text-emerald-600", icon_class="w-4 h-4") }}
-          <div class="min-w-0">
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="font-bold text-sm text-slate-900">{{ c.merchant_name }}</span>
-              <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[0.625rem] font-semibold">{{ c.confidence_score | int }}% sure</span>
+            {{ merchant_box(merchant_icon(c.merchant_name), "calendar", box="calm-icon", fallback_class="", icon_class="w-4 h-4") }}
+            <div class="min-w-0">
+              <div class="calm-name truncate">{{ c.merchant_name }}</div>
+              <div class="calm-meta">{{ frequency_labels[c.detected_frequency] }} · {% if c.is_variable %}about {{ money(c.average_amount) }}{% else %}{{ money(c.last_amount) }}{% endif %} · next ~{{ c.next_estimated_date | day }} · {{ c.confidence_score | int }}% sure</div>
             </div>
-            <p class="text-[0.6875rem] text-slate-500 mt-0.5">
-              {{ frequency_labels[c.detected_frequency] }} •
-              {% if c.is_variable %}about {{ money(c.average_amount) }}{% else %}{{ money(c.last_amount) }}{% endif %} •
-              next around {{ c.next_estimated_date | day }}
-            </p>
           </div>
-          </div>
-          <div class="flex items-center gap-2 self-end sm:self-auto">
+          <div class="flex items-center gap-1 flex-shrink-0">
             <form method="post" action="/bills/candidates/{{ c.id }}/dismiss">
-              <button type="submit" class="px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-rose-600 rounded-lg transition-colors">Not a bill</button>
+              <button type="submit" class="px-2 py-1 text-xs font-semibold calm-muted">Not a bill</button>
             </form>
             <form method="post" action="/bills/candidates/{{ c.id }}/accept">
-              <button type="submit" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors">Add Bill</button>
+              <button type="submit" class="calm-btn">Add</button>
             </form>
           </div>
         </div>
-        <details id="candidate-{{ c.id }}" class="text-[0.6875rem] text-slate-500">
-          <summary class="cursor-pointer font-semibold text-emerald-700 hover:text-emerald-800 select-none">Why this looks like a bill · edit before adding</summary>
+        <details class="calm-fold text-[0.6875rem] calm-muted">
+          <summary class="cursor-pointer font-semibold select-none">Why this looks like a bill · edit before adding</summary>
           <ul class="mt-1.5 ml-4 list-disc space-y-0.5">
             {% for reason in candidate_reasons[c.id] %}<li>{{ reason }}</li>{% endfor %}
           </ul>
           <form method="post" action="/bills/candidates/{{ c.id }}/accept" class="mt-2 flex flex-wrap items-end gap-2">
             <label class="flex flex-col gap-0.5">
-              <span class="font-semibold text-slate-600">Name</span>
+              <span class="font-semibold">Name</span>
               <input type="text" name="name" value="{{ c.merchant_name }}" class="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500" />
             </label>
             <label class="flex flex-col gap-0.5">
-              <span class="font-semibold text-slate-600">Amount</span>
+              <span class="font-semibold">Amount</span>
               <input type="number" step="0.01" min="0" name="amount" value="{{ '%.2f' | format(c.average_amount if c.is_variable else c.last_amount) }}" class="w-28 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500" />
             </label>
-            <button type="submit" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-colors">Add with changes</button>
+            <button type="submit" class="calm-btn">Add with changes</button>
           </form>
         </details>
       </div>
@@ -190,94 +155,71 @@
   {% endif %}
 
   <!-- Upcoming due dates -->
-  <div class="space-y-2.5">
-    <div class="flex items-end justify-between px-1">
-      <div>
-        <div class="text-xs font-medium text-slate-500">Upcoming Bills</div>
-        <div class="text-2xl font-extrabold text-slate-900 tracking-tight leading-snug">{{ money(total_upcoming) }}</div>
-        <div class="text-[0.6875rem] text-slate-400">Due in the next {{ upcoming_days }} days</div>
-      </div>
-    </div>
-
-    <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl divide-y divide-slate-100 overflow-hidden">
-      {% for bill, occ in upcoming_bills %}
-      {% set days = (occ.due_date - today).days %}
-      {% set cat = category_map.get(bill.category_id) if bill.category_id else none %}
-      <div class="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/50 transition-colors">
-        <div class="flex items-center gap-3 min-w-0">
-          {{ merchant_box(bill_icon(bill), cat.icon if cat else "calendar", fallback_class="bg-slate-100 text-slate-600", fallback_style=("color: " ~ cat.color ~ ";") if cat else "") }}
-          <div class="min-w-0">
-            <div class="font-bold text-sm text-slate-900 leading-snug truncate">{{ bill.name }}</div>
-            <div class="text-xs {% if days < 0 %}text-rose-600 font-semibold{% elif days <= 2 %}text-amber-600 font-semibold{% else %}text-slate-400{% endif %}">
-              {{ occ.due_date | day }} ·
-              {% if days < 0 %}overdue {{ -days }} day{{ "s" if days != -1 }}{% elif days == 0 %}due today{% elif days == 1 %}tomorrow{% else %}in {{ days }} days{% endif %}
-            </div>
+  <div class="calm-head"><span>Next {{ upcoming_days }} days</span><span>{{ money(total_upcoming) }}</span></div>
+  <div class="calm-list calm-band">
+    {% for bill, occ in upcoming_bills %}
+    {% set days = (occ.due_date - today).days %}
+    {% set cat = category_map.get(bill.category_id) if bill.category_id else none %}
+    <div class="calm-row">
+      <div class="flex items-center gap-3 min-w-0">
+        {{ merchant_box(bill_icon(bill), cat.icon if cat else "calendar", box="calm-icon", fallback_class="", icon_class="w-4 h-4") }}
+        <div class="min-w-0">
+          <div class="calm-name truncate">{{ bill.name }}</div>
+          <div class="calm-meta {% if days < 0 %}calm-neg{% elif days <= 2 %}calm-warn{% endif %}">
+            {{ occ.due_date | day }} ·
+            {% if days < 0 %}overdue {{ -days }} day{{ "s" if days != -1 }}{% elif days == 0 %}due today{% elif days == 1 %}tomorrow{% else %}in {{ days }} days{% endif %}
           </div>
         </div>
-        <div class="flex items-center gap-3 flex-shrink-0">
-          <div class="font-bold text-sm text-slate-900">{% if bill.is_variable_amount %}≈ {% endif %}{{ money(occ.expected_amount) }}</div>
-          <form method="post" action="/bills/occurrences/{{ occ.id }}/paid">
-            <button type="submit" class="px-2.5 py-1 text-[0.6875rem] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors" title="Paid outside your linked accounts? Mark it here.">Mark paid</button>
-          </form>
-        </div>
       </div>
-      {% else %}
-      <div class="p-5 text-center text-xs text-slate-400">Nothing due in the next {{ upcoming_days }} days.</div>
-      {% endfor %}
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <span class="calm-amount">{% if bill.is_variable_amount %}≈ {% endif %}{{ money(occ.expected_amount) }}</span>
+        <form method="post" action="/bills/occurrences/{{ occ.id }}/paid">
+          <button type="submit" class="calm-btn" title="Paid outside your linked accounts? Mark it here.">Paid</button>
+        </form>
+      </div>
     </div>
+    {% else %}
+    <div class="calm-row text-xs calm-muted">Nothing due in the next {{ upcoming_days }} days.</div>
+    {% endfor %}
   </div>
 
   <!-- All bills -->
-  <div class="space-y-2.5 pt-2">
-    <div class="flex items-center justify-between px-1">
-      <h3 class="font-bold text-base text-slate-900">Recurring</h3>
-      <span class="text-[0.6875rem] text-slate-400">Tap a bill to edit</span>
-    </div>
-
-    <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl divide-y divide-slate-100 overflow-hidden">
-      {% for bill in recurring_bills %}
-      {% set cat = category_map.get(bill.category_id) if bill.category_id else none %}
-      {% set last = last_closed.get(bill.id) %}
-      {% set logo = bill_icon(bill) %}
-      {% set bill_data = {
-        "id": bill.id | string, "name": bill.name, "merchant": bill.merchant_name,
-        "amount": "%.2f" | format(bill.expected_amount), "frequency": bill.frequency.value,
-        "due": bill.next_due_date.isoformat(), "category": (bill.category_id | string) if bill.category_id else "",
-        "variable": bill.is_variable_amount, "status": bill.status.value,
-        "icon": logo.as_dict() if logo else none
-      } %}
-      <div role="button" tabindex="0" onclick="openBillModal({{ bill_data | tojson | forceescape }}, this)" onkeydown="if (event.key === 'Enter') this.click()"
-        class="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50 transition-colors cursor-pointer {% if bill.status.value == 'paused' %}opacity-60{% endif %}">
-        <div class="flex items-center gap-3 min-w-0">
-          {{ merchant_box(logo, cat.icon if cat else "calendar", fallback_class="bg-emerald-100 text-emerald-600", fallback_style=("color: " ~ cat.color ~ ";") if cat else "") }}
-          <div class="min-w-0">
-            <div class="flex items-center gap-1.5">
-              <span class="font-bold text-sm text-slate-900 leading-snug truncate">{{ bill.name }}</span>
-              {% if bill.status.value == "paused" %}<span class="px-1.5 py-px rounded bg-slate-100 text-slate-500 text-[0.5625rem] font-bold uppercase">Paused</span>{% endif %}
-              {% if bill.detected_automatically %}<span class="px-1.5 py-px rounded bg-emerald-50 text-emerald-700 text-[0.5625rem] font-bold uppercase" title="Found by bill detection">Auto</span>{% endif %}
-            </div>
-            <div class="text-xs text-slate-400">{{ frequency_labels[bill.frequency] }} · next {{ bill.next_due_date | day }}</div>
-            {% if last %}
-            <div class="text-[0.6875rem] mt-0.5">
-              {% if last.status.value == "missed" %}
-              <span class="text-rose-600 font-semibold">No payment found for {{ last.due_date | day }}</span>
-              {% elif bill.id in price_changed %}
-              <span class="text-amber-600 font-semibold">Price changed: {{ money(last.expected_amount) }} → {{ money(last.paid_amount) }}</span>
-              {% else %}
-              <span class="text-emerald-600">Paid {{ last.paid_at | day if last.paid_at else "" }}{% if last.paid_amount %} · {{ money(last.paid_amount) }}{% endif %}</span>
-              {% endif %}
-            </div>
-            {% endif %}
-          </div>
-        </div>
-        <div class="text-right flex-shrink-0">
-          <div class="font-bold text-sm text-slate-900">{% if bill.is_variable_amount %}≈ {% endif %}{{ money(bill.expected_amount) }}</div>
+  <div class="calm-head"><span>Recurring</span><span>Tap a bill to edit</span></div>
+  <div class="calm-list calm-band">
+    {% for bill in recurring_bills %}
+    {% set cat = category_map.get(bill.category_id) if bill.category_id else none %}
+    {% set last = last_closed.get(bill.id) %}
+    {% set logo = bill_icon(bill) %}
+    {% set bill_data = {
+      "id": bill.id | string, "name": bill.name, "merchant": bill.merchant_name,
+      "amount": "%.2f" | format(bill.expected_amount), "frequency": bill.frequency.value,
+      "due": bill.next_due_date.isoformat(), "category": (bill.category_id | string) if bill.category_id else "",
+      "variable": bill.is_variable_amount, "status": bill.status.value,
+      "icon": logo.as_dict() if logo else none
+    } %}
+    <div role="button" tabindex="0" onclick="openBillModal({{ bill_data | tojson | forceescape }}, this)" onkeydown="if (event.key === 'Enter') this.click()"
+      class="calm-row {% if bill.status.value == 'paused' %}opacity-60{% endif %}">
+      <div class="flex items-center gap-3 min-w-0">
+        {{ merchant_box(logo, cat.icon if cat else "calendar", box="calm-icon", fallback_class="", icon_class="w-4 h-4") }}
+        <div class="min-w-0">
+          <div class="calm-name truncate">{{ bill.name }}</div>
+          <div class="calm-meta">{{ frequency_labels[bill.frequency] }} · next {{ bill.next_due_date | day }}{% if bill.status.value == "paused" %} · paused{% endif %}{% if bill.detected_automatically %} · auto{% endif %}</div>
+          {% if last %}
+          {% if last.status.value == "missed" %}
+          <div class="calm-meta calm-neg">No payment found for {{ last.due_date | day }}</div>
+          {% elif bill.id in price_changed %}
+          <div class="calm-meta calm-warn">Price changed: {{ money(last.expected_amount) }} → {{ money(last.paid_amount) }}</div>
+          {% else %}
+          <div class="calm-meta">Paid {{ last.paid_at | day if last.paid_at else "" }}{% if last.paid_amount %} · {{ money(last.paid_amount) }}{% endif %}</div>
+          {% endif %}
+          {% endif %}
         </div>
       </div>
-      {% else %}
-      <div class="p-5 text-center text-xs text-slate-400">No bills yet. Add one with + or use “Scan history” to find them in your transactions.</div>
-      {% endfor %}
+      <span class="calm-amount flex-shrink-0">{% if bill.is_variable_amount %}≈ {% endif %}{{ money(bill.expected_amount) }}</span>
     </div>
+    {% else %}
+    <div class="calm-row text-xs calm-muted">No bills yet. Add one with + or use “Scan history” to find them in your transactions.</div>
+    {% endfor %}
   </div>
 
 </div>
@@ -356,7 +298,7 @@
   function showBillIcon(bill, row) {
     iconBill = bill;
     const preview = document.getElementById("edit_icon_preview");
-    const shown = row && row.querySelector(".kash-icon-box");
+    const shown = row && row.querySelector(".calm-icon, .kash-icon-box");
     if (shown) {  // the same icon the list shows (logo or category icon)
       preview.className = shown.className;
       preview.setAttribute("style", shown.getAttribute("style") || "");

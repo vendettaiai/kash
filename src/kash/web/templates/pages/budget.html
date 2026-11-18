@@ -3,114 +3,63 @@
 {% block title %}Budget - Kash{% endblock %}
 
 {% block content %}
-<div class="space-y-4 max-w-4xl mx-auto pb-4">
+{# Calm layout (app.css "Calm layout"): no boxes, thin lines, grey bars; red only for a
+   category over its budget. #}
+<div class="calm max-w-2xl mx-auto pb-4">
 
-  <!-- Mobile Top Bar: Month Selector & Add Budget Button -->
-  <div class="flex items-center justify-between pt-1 pb-1">
+  <div class="flex items-center justify-between pt-1">
     <div class="flex items-center gap-2">
-      <a href="/budget?month={{ prev_month }}" class="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" title="Previous Month">
-        {{ icon("chevron-left", "w-4 h-4") }}
-      </a>
-      <div class="flex items-center gap-1.5 font-extrabold text-base text-slate-900">
-        <span>{{ period_label }}</span>
-      </div>
-      <a href="/budget?month={{ next_month }}" class="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" title="Next Month">
-        {{ icon("chevron-right", "w-4 h-4") }}
-      </a>
+      <a href="/budget?month={{ prev_month }}" class="calm-round" title="Previous month" aria-label="Previous month">{{ icon("chevron-left", "w-4 h-4") }}</a>
+      <div class="calm-title px-1">{{ period_label }}</div>
+      <a href="/budget?month={{ next_month }}" class="calm-round" title="Next month" aria-label="Next month">{{ icon("chevron-right", "w-4 h-4") }}</a>
     </div>
-    <button onclick="openBudgetModal('', '', '')" class="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" title="Set Category Budget">
-      {{ icon("plus", "w-4 h-4") }}
-    </button>
+    <button onclick="openBudgetModal('', '', '')" class="calm-round" title="Set a category budget" aria-label="Set a category budget">{{ icon("plus", "w-4 h-4") }}</button>
   </div>
 
-  <!-- Circular Budget Progress Donut Gauge -->
-  <div class="kash-card p-6 bg-white border border-slate-100 shadow-sm rounded-2xl flex flex-col items-center">
-    <div class="relative w-48 h-48 flex items-center justify-center my-2">
-      <!-- SVG Gauge Ring -->
-      {% set pct_clamped = [budget_pct_used, 100] | min %}
-      {% set dash_offset = (301.6 * (100 - pct_clamped) / 100) %}
-      <svg class="w-full h-full donut-gauge-ring" viewBox="0 0 120 120">
-        <!-- Background Track -->
-        <circle cx="60" cy="60" r="48" stroke="var(--kash-border)" stroke-width="11" fill="none" />
-        <!-- Progress Fill -->
-        <circle 
-          cx="60" 
-          cy="60" 
-          r="48" 
-          stroke="{% if budget_pct_used > 100 %}#ef4444{% elif budget_pct_used > 85 %}#f59e0b{% else %}#059669{% endif %}" 
-          stroke-width="11" 
-          stroke-dasharray="301.6" 
-          stroke-dashoffset="{{ dash_offset }}" 
-          stroke-linecap="round" 
-          fill="none" 
-        />
-      </svg>
-
-      <!-- Center Metric Content -->
-      <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span class="text-3xl font-extrabold tracking-tight text-slate-900 leading-none">{{ budget_pct_used }}%</span>
-        <span class="text-xs font-bold text-slate-700 mt-1">{{ available_funds | money }}</span>
-        <span class="text-[0.625rem] text-slate-400 font-medium">remaining</span>
-      </div>
-    </div>
-
-    <!-- Spent vs Budgeted Summary Stats -->
-    <div class="grid grid-cols-2 gap-8 w-full max-w-xs pt-4 mt-2 border-t border-slate-100 text-center">
-      <div>
-        <span class="text-[0.6875rem] text-slate-400 font-medium">Spent</span>
-        <p class="text-base font-bold text-slate-900 mt-0.5">{{ total_spent | money }}</p>
-      </div>
-      <div>
-        <span class="text-[0.6875rem] text-slate-400 font-medium">Budgeted</span>
-        <p class="text-base font-bold text-slate-900 mt-0.5">{{ total_budgeted | money }}</p>
-      </div>
-    </div>
+  <!-- Left to spend -->
+  {% set over = budget_pct_used > 100 %}
+  <div class="pt-6">
+    <div class="calm-label">Left to spend</div>
+    <div class="calm-big {{ 'calm-neg' if available_funds < 0 }}">{{ available_funds | money }}</div>
+    <div class="calm-sub">{{ total_spent | money }} spent of {{ total_budgeted | money }} · {{ budget_pct_used }}%</div>
+    <div class="calm-bar mt-3"><i class="{{ 'over' if over }}" style="width: {{ [budget_pct_used, 100] | min }}%"></i></div>
     {% if unbudgeted_spent > 0 %}
-    <p class="text-[0.6875rem] text-slate-400 text-center">+ {{ unbudgeted_spent | money }} in categories without a budget (listed below)</p>
+    <div class="calm-meta mt-2">+ {{ unbudgeted_spent | money }} in categories without a budget (listed below)</div>
     {% endif %}
   </div>
 
-  <!-- Category Envelopes -->
-  <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl p-4 md:p-5 space-y-4">
+  <!-- Categories -->
+  <div class="calm-head"><span>Categories</span><span>Tap to edit</span></div>
+  <div class="calm-list calm-band">
     {% for cp in category_progress %}
+    {% set has_budget = cp.effective_budget > 0 %}
+    {% set pct = (cp.spent_amount / cp.effective_budget * 100) | round | int if has_budget else 0 %}
     <div role="button" tabindex="0" title="Edit budget"
       onclick="openBudgetModal('{{ cp.category_id }}', {{ cp.category_name | tojson | forceescape }}, '{{ '%.2f' | format(cp.budgeted) if cp.budgeted > 0 else '' }}')"
       onkeydown="if (event.key === 'Enter') this.click()"
-      class="space-y-2 -mx-2 px-2 py-1.5 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors">
-      <div class="flex items-center justify-between text-xs">
-        <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-xl flex items-center justify-center text-white flex-shrink-0" style="background-color: {{ cp.category_color or '#6366f1' }};">
-            {{ icon(cp.category_icon or 'tag', "w-4 h-4") }}
+      class="calm-row" style="display:block">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="calm-icon">{{ icon(cp.category_icon or 'tag', "w-4 h-4") }}</div>
+          <div class="min-w-0">
+            <div class="calm-name truncate">{{ cp.category_name }}</div>
+            <div class="calm-meta {{ 'calm-neg' if pct > 100 }}">
+              {% if has_budget %}{{ cp.spent_amount | money(0) }} of {{ cp.effective_budget | money(0) }}{% if pct > 100 %} · over by {{ (cp.spent_amount - cp.effective_budget) | money(0) }}{% endif %}{% else %}{{ cp.spent_amount | money(0) }} spent · no budget{% endif %}
+            </div>
           </div>
-          <span class="font-bold text-slate-900 text-sm">{{ cp.category_name }}</span>
         </div>
-
-        <div class="text-right flex items-center gap-3">
-          <span class="text-slate-500 font-medium">
-            {{ cp.spent_amount | money(0) }} / {{ cp.effective_budget | money(0) }}
-          </span>
-          <span class="font-bold text-slate-900 w-11 text-right">
-            {% if cp.effective_budget > 0 %}
-            {{ (cp.spent_amount / cp.effective_budget * 100) | round | int }}%
-            {% else %}
-            <span class="text-emerald-600 text-[0.6875rem]">+ Set</span>
-            {% endif %}
-          </span>
-        </div>
+        {% if has_budget %}
+        <span class="calm-amount {{ 'calm-neg' if pct > 100 }}">{{ (cp.effective_budget - cp.spent_amount) | money(0) }} left</span>
+        {% else %}
+        <span class="calm-btn">Set</span>
+        {% endif %}
       </div>
-
-      <!-- Progress Bar -->
-      <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-        <div 
-          class="h-full rounded-full transition-all duration-500" 
-          style="width: {% if cp.effective_budget > 0 %}{{ [((cp.spent_amount / cp.effective_budget * 100) | round | int), 100] | min }}%{% else %}0%{% endif %}; background-color: {{ cp.category_color or '#6366f1' }};"
-        ></div>
-      </div>
+      {% if has_budget %}
+      <div class="calm-bar mt-2" style="margin-left: 3rem"><i class="{{ 'over' if pct > 100 }}" style="width: {{ [pct, 100] | min }}%"></i></div>
+      {% endif %}
     </div>
     {% else %}
-    <div class="py-8 text-center text-xs text-slate-400">
-      No expense transactions or budgets recorded for {{ period_label }}. Click '+' to set your first budget.
-    </div>
+    <div class="calm-row text-xs calm-muted">No spending or budgets for {{ period_label }}. Tap + to set your first budget.</div>
     {% endfor %}
   </div>
 

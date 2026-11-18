@@ -2,7 +2,9 @@
 
 Phones and computers have their own layout, because the cards differ (a phone
 shows income and expenses as two small cards, a computer as a row of stats).
-The defaults are the dashboards as they were before customizing existed.
+The phone default is the calm layout: balance (banking / net worth), the month's
+money in and out, and recent transactions. Phone layouts saved before it
+(no ``mobile_version``) start over from it once.
 
 Stored in ``user_settings.dashboard_widgets`` as
 ``{"mobile": [{"id": "balance"}, ...], "desktop": [{"id": "stats", "span": 12}, ...]}``;
@@ -29,12 +31,12 @@ class Card:
 
 
 CATALOG: tuple[Card, ...] = (
-    Card("balance", "Banking balance", "Balance, change this month and trend", "bank", ("mobile",)),
+    Card("balance", "Balance", "Banking or net worth, change this month", "bank", ("mobile",)),
     Card(
         "income_expenses", "Income & expenses", "Two cards with details", "arrow-up-right",
         ("mobile",),
     ),
-    Card("net_flow", "Surplus or deficit", "What's left this month", "trending-up", ("mobile",)),
+    Card("net_flow", "This month", "Money in, money out, what's left", "trending-up", ("mobile",)),
     Card("stats", "Summary", "Balance, income, expenses and surplus", "wallet", ("desktop",)),
     Card(
         "net_worth", "Net worth", "Assets minus debts, change this month", "landmark",
@@ -65,9 +67,12 @@ CATALOG: tuple[Card, ...] = (
 CARDS = {c.id: c for c in CATALOG}
 
 DEFAULTS: dict[Device, tuple[str, ...]] = {
-    "mobile": ("balance", "income_expenses", "net_flow", "budget", "recent"),
+    "mobile": ("balance", "net_flow", "recent"),
     "desktop": ("stats", "categories", "recent", "bills", "budget", "cash_flow"),
 }
+
+
+MOBILE_VERSION = 2  # bump to move every saved phone layout to the new default
 
 
 @dataclass(frozen=True)
@@ -106,13 +111,24 @@ def clean(device: Device, entries: Any) -> list[Placed] | None:
 
 def layout(stored: Any, device: Device) -> list[Placed]:
     """The saved layout for ``device``, or its default."""
-    saved = clean(device, stored.get(device)) if isinstance(stored, dict) else None
+    if not isinstance(stored, dict):
+        return default_layout(device)
+    if device == "mobile" and stored.get("mobile_version") != MOBILE_VERSION:
+        return default_layout(device)
+    saved = clean(device, stored.get(device))
     return default_layout(device) if saved is None else saved
 
 
 def to_stored(stored: Any, device: Device, placed: list[Placed] | None) -> dict[str, Any]:
     """``stored`` with ``device`` replaced (None = back to the default)."""
-    result = {d: v for d, v in stored.items() if d in DEVICES} if isinstance(stored, dict) else {}
+    result = (
+        {d: v for d, v in stored.items() if d in (*DEVICES, "mobile_version")}
+        if isinstance(stored, dict)
+        else {}
+    )
+    if result.get("mobile_version") != MOBILE_VERSION:
+        result.pop("mobile", None)  # an old phone layout: replaced by the new default
+    result["mobile_version"] = MOBILE_VERSION
     if placed is None:
         result.pop(device, None)
     else:
