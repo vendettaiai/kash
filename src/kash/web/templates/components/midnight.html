@@ -1,0 +1,13 @@
+{# Midnight helpers (app.css "Midnight"). #}
+
+{# A big amount with the cents drawn smaller: $13,601<span>.64</span>. Formats whose
+   decimals don't end the text after a dot (1.234,56 €) are shown unchanged. #}
+{% macro big_money(value) -%}
+{% set text = value | money %}
+{% set head, sep, tail = text.rpartition(".") %}
+{%- if sep and tail | length == 2 and tail.isdigit() -%}
+{{ head }}<span class="mn-cents">.{{ tail }}</span>
+{%- else -%}
+{{ text }}
+{%- endif -%}
+{%- endmacro %}

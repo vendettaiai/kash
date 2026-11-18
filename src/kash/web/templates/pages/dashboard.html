@@ -4,6 +4,7 @@
 
 {% block content %}
 {% from "components/merchant_icon.html" import merchant_box %}
+{% from "components/midnight.html" import big_money %}
 {% macro delta(pct, good_when_up=true) -%}
   {%- if pct is none -%}
     <span class="text-slate-400 font-medium">No comparison yet</span>
@@ -402,7 +403,7 @@ openTxModal('{{ tx.id }}', {{ tx.clean_description | tojson | forceescape }}, {{
    a deficit and reminders. Order and choice come from Customize.
    --------------------------------------------------------------------------- #}
 {% macro calm_change(change) -%}
-{% if change is not none %}<div class="calm-sub">{{ "↑" if change >= 0 else "↓" }} {{ change | abs | money }} {{ "this month" if range.is_current else "in " ~ range.month.start.strftime("%B") }}</div>{% endif %}
+{% if change is not none %}<div class="calm-sub {{ 'mn-up' if change >= 0 }}">{{ "↑" if change >= 0 else "↓" }} {{ change | abs | money }} {{ "this month" if range.is_current else "in " ~ range.month.start.strftime("%B") }}</div>{% endif %}
 {%- endmacro %}
 {% macro calm_needs_category() -%}
 {% if uncategorized_count %}
@@ -422,19 +423,19 @@ openTxModal('{{ tx.id }}', {{ tx.clean_description | tojson | forceescape }}, {{
 
 {% macro mobile_card(id) -%}
 {% if id == "balance" %}
-<section data-calm-balance>
+<section data-calm-balance class="mn-hero pt-2">
   <div class="calm-seg" role="tablist" aria-label="Show">
     <button type="button" role="tab" aria-selected="true" data-show="bank">Banking</button>
     <button type="button" role="tab" aria-selected="false" data-show="worth">Net worth</button>
   </div>
-  <a href="/accounts" data-panel="bank" class="block pt-4">
+  <a href="/accounts" data-panel="bank" class="block pt-5">
     <div class="calm-label">{% if range.is_current %}Available in your bank accounts{% else %}In your bank accounts on {{ balance_as_of | day }}{% endif %}</div>
-    <div class="calm-big">{{ banking_balance | money }}</div>
+    <div class="calm-big">{{ big_money(banking_balance) }}</div>
     {{ calm_change(balance_change) }}
   </a>
-  <a href="/accounts" data-panel="worth" class="hidden pt-4">
+  <a href="/accounts" data-panel="worth" class="hidden pt-5">
     <div class="calm-label">Net worth{% if not range.is_current %} on {{ balance_as_of | day }}{% endif %}</div>
-    <div class="calm-big">{{ net_worth.total | money }}</div>
+    <div class="calm-big">{{ big_money(net_worth.total) }}</div>
     {{ calm_change(net_worth.change) }}
     <div class="calm-meta mt-2">Banking {{ net_worth.banking | money(0) }} · Investments {{ net_worth.investments | money(0) }} · Debts {{ (0 - net_worth.debts) | money(0) }}</div>
   </a>
@@ -460,13 +461,13 @@ openTxModal('{{ tx.id }}', {{ tx.clean_description | tojson | forceescape }}, {{
   {{ calm_needs_category() }}
 </div>
 {% elif id == "income_expenses" %}
-<div class="grid grid-cols-2 calm-band">
-  <a href="/transactions?type=income&{{ range_query }}" class="block py-3 pr-3">
+<div class="grid grid-cols-2 calm-band" style="padding:0">
+  <a href="/transactions?type=income&{{ range_query }}" class="block py-3 px-3.5">
     <div class="calm-label">Money in</div>
     <div class="calm-mid mt-0.5">{{ summary.monthly_income | money }}</div>
     {{ deposits_nudge() }}
   </a>
-  <a href="/transactions?type=expense&{{ range_query }}" class="block py-3 pl-3" style="border-left: 1px solid var(--calm-line)">
+  <a href="/transactions?type=expense&{{ range_query }}" class="block py-3 px-3.5" style="border-left: 1px solid var(--calm-line)">
     <div class="calm-label">Money out</div>
     <div class="calm-mid mt-0.5">{{ summary.monthly_expenses | money }}</div>
     {% if summary.monthly_refunds > 0 %}<div class="calm-meta">after {{ summary.monthly_refunds | money(0) }} refunds</div>{% endif %}
@@ -474,8 +475,8 @@ openTxModal('{{ tx.id }}', {{ tx.clean_description | tojson | forceescape }}, {{
 </div>
 {% elif id == "budget" %}
 <div>
-  <div class="calm-head"><span>Budget</span><a href="/budget">Details ›</a></div>
-  <a href="/budget" class="block py-1">
+  <div class="calm-head"><span>Budget</span><a href="/budget">Details</a></div>
+  <a href="/budget" class="block py-3.5 calm-band">
     {% if summary.budget_total_budgeted > 0 %}
     <div class="flex items-baseline justify-between gap-3">
       <span class="calm-name">{{ summary.budget_remaining | money }} left</span>
@@ -489,8 +490,8 @@ openTxModal('{{ tx.id }}', {{ tx.clean_description | tojson | forceescape }}, {{
 </div>
 {% elif id == "recent" %}
 <div>
-  <div class="calm-head"><span>Recent</span><a href="/transactions">See all ›</a></div>
-  <div class="calm-list">
+  <div class="calm-head"><span>Recent</span><a href="/transactions">See all</a></div>
+  <div class="calm-list calm-band">
     {% for tx in recent_transactions %}
     <div role="button" tabindex="0" onclick="{{ tx_click(tx) }}" onkeydown="if (event.key === 'Enter') this.click()" title="View details, set category, or create a rule" class="calm-row">
       <div class="flex items-center gap-3 min-w-0">
@@ -541,11 +542,14 @@ openTxModal('{{ tx.id }}', {{ tx.clean_description | tojson | forceescape }}, {{
 {% set mobile_ids = layouts.mobile | map(attribute="id") | list %}
 <div class="md:hidden calm calm-stack pb-4">
   <div class="flex items-center justify-between pt-1">
-    <div>
+    <div class="flex items-center gap-3 min-w-0">
       {% set user_name = request.state.user_name | default("") %}
       {% if user_name %}
-      <div class="calm-label">{{ greeting }},</div>
-      <div class="calm-title">{{ user_name }}</div>
+      <div class="mn-avatar" aria-hidden="true">{{ user_name[:1] | upper }}</div>
+      <div class="min-w-0">
+        <div class="calm-label">{{ greeting }},</div>
+        <div class="calm-name truncate" style="font-size:1.0625rem;font-weight:800">{{ user_name }}</div>
+      </div>
       {% else %}
       <div class="calm-title">{{ greeting }}</div>
       {% endif %}

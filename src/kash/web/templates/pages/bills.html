@@ -67,12 +67,19 @@
 
   <!-- This month's bills: paid so far vs. still to pay -->
   {% if progress.items %}
-  <div class="pt-6">
-    <div class="calm-label">{{ progress.month_start.strftime("%B") }} bills · left to pay</div>
-    <div class="calm-big">{{ money(progress.remaining) }}</div>
-    <div class="calm-sub">{{ money(progress.paid) }} paid of {{ money(progress.total) }} · {{ progress.paid_count }} of {{ progress.items | length }} bills</div>
-    <div class="calm-bar mt-3" role="progressbar" aria-valuenow="{{ progress.pct_paid }}" aria-valuemin="0" aria-valuemax="100" aria-label="Bills paid this month"><i style="width: {{ progress.pct_paid }}%"></i></div>
-    {% if progress.overdue %}<div class="text-xs font-semibold calm-neg mt-2">{{ money(progress.overdue) }} overdue</div>{% endif %}
+  <!-- Ring: the green part is what's paid -->
+  <div class="mn-hero pt-5">
+    <div class="mn-ring" role="progressbar" aria-valuenow="{{ progress.pct_paid }}" aria-valuemin="0" aria-valuemax="100" aria-label="Bills paid this month">
+      <svg viewBox="0 0 120 120" aria-hidden="true">
+        <circle cx="60" cy="60" r="52" fill="none" stroke="var(--calm-chip)" stroke-width="9"/>
+        {% if progress.pct_paid > 0 %}<circle cx="60" cy="60" r="52" fill="none" stroke="var(--calm-pos)" stroke-width="9" stroke-linecap="round" stroke-dasharray="{{ '%.1f' | format(progress.pct_paid * 3.267) }} 400" transform="rotate(-90 60 60)"/>{% endif %}
+      </svg>
+      <div class="mn-ring-c">
+        <div class="calm-mid">{{ money(progress.remaining) }}</div>
+        <div class="calm-label">left to pay in {{ progress.month_start.strftime("%B") }}</div>
+      </div>
+    </div>
+    <div class="calm-sub mt-3">{{ progress.paid_count }} of {{ progress.items | length }} paid · {{ money(progress.paid) }} of {{ money(progress.total) }}{% if progress.overdue %} · <span class="calm-neg">{{ money(progress.overdue) }} overdue</span>{% endif %}</div>
   </div>
 
   <details id="due-this-month" class="calm-fold calm-band mt-5">

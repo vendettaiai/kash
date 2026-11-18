@@ -59,7 +59,7 @@ OFFLINE_PAGE = """<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
 align-items:center;justify-content:center;min-height:100vh;margin:0;text-align:center;padding:1rem}
 button{margin-top:1rem;padding:.6rem 1.2rem;border:0;border-radius:.75rem;background:#059669;
 color:#fff;font-weight:600;font-size:1rem}
-@media (prefers-color-scheme:dark){body{background:#0b1120;color:#f8fafc}}</style></head>
+@media (prefers-color-scheme:dark){body{background:#000000;color:#f8fafc}}</style></head>
 <body><div><h1>You're offline</h1><p>Kash needs a connection to your server.</p>
 <button onclick="location.reload()">Try again</button></div></body></html>"""
 

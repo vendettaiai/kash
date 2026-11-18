@@ -646,3 +646,107 @@ details.calm-fold[open] .calm-chev { transform: rotate(180deg); }
 :root { --tx-name: #7b2fa8; }
 [data-theme="dark"] { --tx-name: #d3a4f1; }
 .kash-tx-name, .calm .kash-tx-name { color: var(--tx-name); }
+
+/* ==========================================================================
+   Midnight: black with one mint accent in dark mode (white and green in light).
+   Lists sit in rounded groups, section headings are bold words, the big number
+   is centered, and the phone tab bar floats with labels.
+   ========================================================================== */
+:root {
+  --mn-group: #ffffff;
+  --mn-group-line: #eef0f3;
+  --mn-tab-on-bg: #0f172a;
+  --mn-tab-on-text: #ffffff;
+  --calm-fill: #059669;
+}
+[data-theme="dark"] {
+  --kash-bg: #000000;
+  --kash-card-bg: #111113;
+  --kash-border: #1c1c1e;
+  --calm-text: #ffffff;
+  --calm-muted: #8e8e93;
+  --calm-faint: #636366;
+  --calm-line: #222225;
+  --calm-chip: #1c1c1e;
+  --calm-fill: #7cf5c3;
+  --calm-neg: #ff6b81;
+  --calm-pos: #7cf5c3;
+  --calm-warn: #ffd166;
+  --mn-group: #111113;
+  --mn-group-line: #111113;
+  --mn-tab-on-bg: #ffffff;
+  --mn-tab-on-text: #000000;
+  --tx-name: #ffffff;
+}
+
+/* Neutral greys instead of blue-slate for the rest of the app in dark mode */
+[data-theme="dark"] .kash-card { background-color: #111113; border-color: #1c1c1e; box-shadow: none; }
+[data-theme="dark"] .bg-white,
+[data-theme="dark"] .focus\:bg-white:focus { background-color: #111113; }
+[data-theme="dark"] .bg-slate-50,
+[data-theme="dark"] .hover\:bg-slate-50:hover { background-color: #1c1c1e; }
+[data-theme="dark"] .bg-slate-100,
+[data-theme="dark"] .hover\:bg-slate-100:hover { background-color: #2c2c2e; }
+[data-theme="dark"] .border-slate-100,
+[data-theme="dark"] .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #1c1c1e; }
+[data-theme="dark"] .border-slate-200,
+[data-theme="dark"] .border-slate-200\/80,
+[data-theme="dark"] .hover\:border-slate-200:hover { border-color: #2c2c2e; }
+[data-theme="dark"] .border-slate-300 { border-color: #3a3a3c; }
+[data-theme="dark"] .kash-topbar { background-color: #000000; border-color: #1c1c1e; }
+[data-theme="dark"] dialog .bg-white,
+[data-theme="dark"] .modal-box { background-color: #1c1c1e; }
+
+/* Groups: a rounded block holding rows */
+.calm-band { border: 1px solid var(--mn-group-line); border-radius: 1.125rem; background-color: var(--mn-group); padding: 0 0.875rem; }
+.calm-list > * + * { border-top-color: var(--calm-line); }
+details.calm-fold.calm-band > .calm-list { margin: 0 -0.875rem; padding: 0 0.875rem; }
+.calm-indent { padding-left: 0; }
+
+/* Section headings: a bold word, a quiet link on the right */
+.calm-head { margin: 1.625rem 0.125rem 0.5rem; align-items: baseline; }
+.calm-head > :first-child { font-size: 1.0625rem; font-weight: 800; letter-spacing: -0.015em; text-transform: none; color: var(--calm-text); }
+.calm-head > :last-child:not(:first-child) { font-size: 0.8125rem; font-weight: 600; color: var(--calm-muted); }
+
+/* Big number: centered, cents smaller */
+.mn-hero { text-align: center; }
+.mn-hero .calm-big { font-size: 3rem; letter-spacing: -0.04em; line-height: 1; margin: 0.375rem 0 0.5rem; }
+.mn-cents { font-size: 0.58em; color: var(--calm-muted); letter-spacing: -0.02em; }
+.mn-hero .calm-sub { font-size: 0.8125rem; font-weight: 700; }
+.mn-up { color: var(--calm-pos); }
+.mn-legend { display: flex; justify-content: space-between; font-size: 0.71875rem; color: var(--calm-muted); margin-top: 0.375rem; }
+
+/* Pill tabs (Banking / Net worth, months) */
+.calm-seg { display: inline-flex; border: 0; padding: 0; gap: 0.25rem; }
+.calm-seg > button, .mn-tab { flex: none; font-size: 0.8125rem; font-weight: 700; color: var(--calm-muted); padding: 0.4375rem 0.875rem; border-radius: 9999px; }
+.calm-seg > button[aria-selected="true"], .mn-tab.on { background-color: var(--mn-tab-on-bg); color: var(--mn-tab-on-text); }
+
+/* Bars: thicker, mint */
+.calm-bar { height: 0.4375rem; background-color: var(--calm-chip); }
+.mn-split { display: flex; gap: 3px; height: 0.375rem; }
+.mn-split > i { display: block; height: 100%; border-radius: 9999px; min-width: 3px; }
+
+/* Round icons and buttons */
+.calm-icon { border-radius: 9999px; }
+.calm-round { border: 0; background-color: var(--calm-chip); color: var(--calm-text); }
+.calm-btn { border: 0; background-color: var(--calm-chip); }
+.mn-avatar { width: 2.25rem; height: 2.25rem; border-radius: 9999px; background-color: var(--calm-chip); color: var(--calm-text); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.875rem; flex-shrink: 0; }
+
+/* Reminders sit in a group too */
+.calm-nudge { border: 1px solid var(--mn-group-line); border-radius: 1.125rem; background-color: var(--mn-group); padding: 0.75rem 0.875rem; }
+
+/* Phone tab bar: floating, with labels; the open page is a solid pill */
+.kash-bottom-nav { left: 0.75rem; right: 0.75rem; bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px)); height: 4rem; border-radius: 1.5rem; border: 1px solid #e5e7eb; padding: 0 0.375rem; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12); }
+[data-theme="dark"] .kash-bottom-nav { background-color: #1c1c1e; border-color: #1c1c1e; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); }
+.kash-nav-item { width: auto; flex: 1; border-radius: 1.125rem; padding: 0.4375rem 0; font-size: 0.65625rem; font-weight: 600; }
+.kash-nav-item svg { width: 1.25rem; height: 1.25rem; }
+.kash-nav-item.active { background-color: var(--mn-tab-on-bg); color: var(--mn-tab-on-text) !important; }
+.kash-nav-item.active svg { stroke: var(--mn-tab-on-text) !important; }
+[data-theme="dark"] .kash-nav-item { color: #8e8e93; }
+[data-theme="dark"] .kash-nav-item svg { stroke: #8e8e93; }
+@media (max-width: 767px) { #main-content { padding-bottom: 6.5rem; } }
+.mn-ring { position: relative; width: 11rem; height: 11rem; margin: 0 auto; }
+.mn-ring > svg { width: 100%; height: 100%; }
+.mn-ring-c { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 1.25rem; }
+.mn-ring-c .calm-label { max-width: 7rem; line-height: 1.3; margin-top: 0.125rem; }
+[data-theme="dark"] body, [data-theme="dark"] body.bg-slate-50 { background-color: #000000; }

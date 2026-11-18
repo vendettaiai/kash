@@ -15,6 +15,7 @@
 {%- endmacro %}
 
 {% block content %}
+{% from "components/midnight.html" import big_money %}
 {# One account. Tapping it opens its transactions. ``net`` is this month's surplus or
    deficit (bank accounts only). #}
 {% macro account_row(acc, ico, amount, posted, net=none) -%}
@@ -41,7 +42,7 @@
 {%- endmacro %}
 {# A group you tap to open. Closed every time you come to the page (see the script). #}
 {% macro collapsible(id, title, count, total, empty) -%}
-<details id="{{ id }}" data-kash-collapse class="calm-fold calm-band">
+<details id="{{ id }}" data-kash-collapse class="calm-fold">
   <summary class="calm-row">
     <span class="flex items-center gap-2">
       <span class="calm-name">{{ title }}</span>
@@ -52,7 +53,7 @@
       <span class="calm-faint calm-chev">{{ icon("chevron-down", "w-4 h-4") }}</span>
     </span>
   </summary>
-  <div class="calm-list calm-rule calm-indent">
+  <div class="calm-list calm-rule">
     {{ caller() }}
     {% if not count %}<div class="calm-row text-xs calm-muted">{{ empty }}</div>{% endif %}
   </div>
@@ -69,14 +70,25 @@
     <a href="/settings?section=accounts" class="calm-round" title="Accounts &amp; bank sync settings" aria-label="Accounts and bank sync settings">{{ icon("settings", "w-4 h-4") }}</a>
   </div>
 
-  <!-- Net worth -->
-  <div class="pt-6">
+  <!-- Net worth, and one bar split into what you have in the bank, invested, and owe -->
+  {% set bank_part = [total_banking, 0] | max %}
+  {% set invest_part = [total_investments, 0] | max %}
+  {% set debt_part = total_liabilities | abs %}
+  {% set parts_total = bank_part + invest_part + debt_part %}
+  <div class="mn-hero pt-6">
     <div class="calm-label">Net worth</div>
-    <div class="calm-big">{{ total_net_worth | money }}</div>
-    <div class="grid grid-cols-3 gap-3 pt-4 mt-4 calm-rule">
-      <div><div class="calm-label">Banking</div><div class="calm-amount mt-0.5">{{ total_banking | money(0) }}</div></div>
-      <div><div class="calm-label">Investments</div><div class="calm-amount mt-0.5">{{ total_investments | money(0) }}</div></div>
-      <div><div class="calm-label">Debts</div><div class="calm-amount mt-0.5">{{ (0 - total_liabilities) | money(0) }}</div></div>
+    <div class="calm-big">{{ big_money(total_net_worth) }}</div>
+    {% if parts_total > 0 %}
+    <div class="mn-split mt-4" role="img" aria-label="Banking {{ total_banking | money(0) }}, investments {{ total_investments | money(0) }}, debts {{ (0 - total_liabilities) | money(0) }}">
+      {% if bank_part %}<i style="flex: {{ bank_part }}; background-color: var(--calm-text)"></i>{% endif %}
+      {% if invest_part %}<i style="flex: {{ invest_part }}; background-color: var(--calm-pos)"></i>{% endif %}
+      {% if debt_part %}<i style="flex: {{ debt_part }}; background-color: var(--calm-neg)"></i>{% endif %}
+    </div>
+    {% endif %}
+    <div class="mn-legend">
+      <span>● Bank {{ total_banking | money(0) }}</span>
+      <span><span class="calm-pos">●</span> Invest {{ total_investments | money(0) }}</span>
+      <span><span class="calm-neg">●</span> Debt {{ total_liabilities | abs | money(0) }}</span>
     </div>
   </div>
 
@@ -98,13 +110,13 @@
   </div>
 
   <!-- Investments and debts: tap to open -->
-  <div class="calm-head"><span>Other accounts</span><span></span></div>
+  <div class="calm-head"><span>Other</span><span></span></div>
+  <div class="calm-band calm-list">
   {% call collapsible("acc-investments", "Investments", investment_accounts | length, total_investments, "No investment accounts.") %}
     {% for acc in investment_accounts %}
     {{ account_row(acc, "trending-up", balances[acc.id], acc.current_balance) }}
     {% endfor %}
   {% endcall %}
-  <div style="margin-top:-1px">
   {% call collapsible("acc-liabilities", "Liabilities & credit", liability_accounts | length, 0 - total_liabilities, "No credit cards or loans.") %}
     {% for acc in liability_accounts %}
     {{ account_row(acc, "credit-card", 0 - balances[acc.id] | abs, 0 - acc.current_balance | abs) }}

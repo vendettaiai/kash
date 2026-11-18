@@ -3,33 +3,35 @@
 {% block title %}Budget - Kash{% endblock %}
 
 {% block content %}
+{% from "components/midnight.html" import big_money %}
 {# Calm layout (app.css "Calm layout"): no boxes, thin lines, grey bars; red only for a
    category over its budget. #}
 <div class="calm max-w-2xl mx-auto pb-4">
 
   <div class="flex items-center justify-between pt-1">
-    <div class="flex items-center gap-2">
-      <a href="/budget?month={{ prev_month }}" class="calm-round" title="Previous month" aria-label="Previous month">{{ icon("chevron-left", "w-4 h-4") }}</a>
-      <div class="calm-title px-1">{{ period_label }}</div>
-      <a href="/budget?month={{ next_month }}" class="calm-round" title="Next month" aria-label="Next month">{{ icon("chevron-right", "w-4 h-4") }}</a>
-    </div>
-    <button onclick="openBudgetModal('', '', '')" class="calm-round" title="Set a category budget" aria-label="Set a category budget">{{ icon("plus", "w-4 h-4") }}</button>
+    <div class="calm-title">Budget</div>
+    {% set short = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] %}
+    <nav class="flex items-center gap-1" aria-label="Month">
+      <a href="/budget?month={{ prev_month }}" class="mn-tab" title="Previous month">{{ short[prev_month[5:7] | int - 1] }}</a>
+      <span class="mn-tab on" aria-current="page" title="{{ period_label }}">{{ short[period[5:7] | int - 1] }}</span>
+      <a href="/budget?month={{ next_month }}" class="mn-tab" title="Next month">{{ short[next_month[5:7] | int - 1] }}</a>
+    </nav>
   </div>
 
   <!-- Left to spend -->
   {% set over = budget_pct_used > 100 %}
-  <div class="pt-6">
-    <div class="calm-label">Left to spend</div>
-    <div class="calm-big {{ 'calm-neg' if available_funds < 0 }}">{{ available_funds | money }}</div>
-    <div class="calm-sub">{{ total_spent | money }} spent of {{ total_budgeted | money }} · {{ budget_pct_used }}%</div>
-    <div class="calm-bar mt-3"><i class="{{ 'over' if over }}" style="width: {{ [budget_pct_used, 100] | min }}%"></i></div>
+  <div class="mn-hero pt-6">
+    <div class="calm-label">Left to spend in {{ period_label }}</div>
+    <div class="calm-big {{ 'calm-neg' if available_funds < 0 }}">{{ big_money(available_funds) }}</div>
+    <div class="calm-bar mt-4"><i class="{{ 'over' if over }}" style="width: {{ [budget_pct_used, 100] | min }}%"></i></div>
+    <div class="mn-legend"><span>{{ total_spent | money }} spent · {{ budget_pct_used }}%</span><span>{{ total_budgeted | money }} budget</span></div>
     {% if unbudgeted_spent > 0 %}
-    <div class="calm-meta mt-2">+ {{ unbudgeted_spent | money }} in categories without a budget (listed below)</div>
+    <div class="calm-meta mt-2" style="text-align:left">+ {{ unbudgeted_spent | money }} in categories without a budget (listed below)</div>
     {% endif %}
   </div>
 
   <!-- Categories -->
-  <div class="calm-head"><span>Categories</span><span>Tap to edit</span></div>
+  <div class="calm-head"><span>Categories</span><button type="button" onclick="openBudgetModal('', '', '')" title="Set a category budget">+ Add</button></div>
   <div class="calm-list calm-band">
     {% for cp in category_progress %}
     {% set has_budget = cp.effective_budget > 0 %}
