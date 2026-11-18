@@ -641,3 +641,8 @@ details.calm-fold[open] .calm-chev { transform: rotate(180deg); }
 .calm .calm-neg { color: var(--calm-neg); }
 .calm .calm-pos { color: var(--calm-pos); }
 .calm .calm-warn { color: var(--calm-warn); }
+
+/* Transaction names in purple, like a bank app's activity list */
+:root { --tx-name: #7b2fa8; }
+[data-theme="dark"] { --tx-name: #d3a4f1; }
+.kash-tx-name, .calm .kash-tx-name { color: var(--tx-name); }

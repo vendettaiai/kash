@@ -60,7 +60,7 @@
 
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-1.5 min-w-0">
-              <span class="font-bold text-sm text-slate-900 truncate group-hover:text-emerald-700 transition-colors">{{ tx.clean_description }}</span>
+              <span class="font-bold text-sm kash-tx-name truncate">{{ tx.clean_description }}</span>
               {% if tx.is_pending %}{{ pending_pill() }}{% endif %}
             </div>
             <div class="flex items-center gap-1.5 text-[0.6875rem] text-slate-400 mt-0.5 flex-wrap">
@@ -112,7 +112,7 @@
                 {{ merchant_box(transaction_icon(tx), "receipt", box="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0", fallback_class="bg-slate-100 text-slate-600 group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors", icon_class="w-3.5 h-3.5") }}
                 <div class="min-w-0">
                   <div class="flex items-center gap-1.5 min-w-0">
-                    <span class="font-bold text-slate-900 truncate group-hover:text-emerald-700 transition-colors" title="{{ tx.clean_description }}">{{ tx.clean_description }}</span>
+                    <span class="font-bold kash-tx-name truncate" title="{{ tx.clean_description }}">{{ tx.clean_description }}</span>
                     {% if tx.is_pending %}{{ pending_pill() }}{% endif %}
                   </div>
                   {% if tx.original_description != tx.clean_description %}
