@@ -368,8 +368,46 @@ openTxModal('{{ tx.id }}', {{ tx.clean_description | tojson | forceescape }}, {{
 </div>
 {%- endmacro %}
 
+{% macro card_net_worth(cls="") -%}
+{% set nw = net_worth %}
+<a href="/accounts" class="{{ cls }} kash-card block p-4 md:p-5 bg-white border border-slate-100 shadow-sm rounded-2xl hover:border-slate-300 hover:shadow-md transition-all cursor-pointer group">
+  <div class="flex items-center justify-between">
+    <span class="text-xs font-medium text-slate-500 group-hover:text-slate-700 transition-colors">Net worth{% if not range.is_current %} · {{ balance_as_of | day }}{% endif %}</span>
+    <span class="text-[0.625rem] text-slate-400 group-hover:text-emerald-600 font-semibold transition-colors">Accounts ›</span>
+  </div>
+  <div class="flex items-end justify-between gap-3">
+    <div class="min-w-0">
+      <div class="text-2xl font-extrabold tracking-tight {{ 'text-rose-600' if nw.total < 0 else 'text-slate-900' }} mt-1 mb-1">{{ nw.total | money }}</div>
+      {% if nw.change is not none %}
+      {% set up = nw.change >= 0 %}
+      <div class="text-xs font-semibold {{ 'text-emerald-600' if up else 'text-rose-600' }}">
+        {{ "↑" if up else "↓" }} {{ nw.change | abs | money }}{% if nw.change_pct is not none %} ({{ "{:.1f}".format(nw.change_pct | abs) }}%){% endif %}
+        <span class="font-medium text-slate-400">{{ "this month" if range.is_current else "in " ~ range.month.start.strftime("%B") }}</span>
+      </div>
+      {% endif %}
+    </div>
+    {% if nw.chart %}
+    {% set down = nw.change is not none and nw.change < 0 %}
+    <svg viewBox="0 0 100 40" preserveAspectRatio="none" class="w-24 h-12 flex-shrink-0 {{ 'text-rose-500' if down else 'text-emerald-500' }}" aria-hidden="true">
+      <path d="{{ nw.chart.area }}" fill="currentColor" fill-opacity="0.12" />
+      <path d="{{ nw.chart.path }}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" />
+    </svg>
+    {% endif %}
+  </div>
+  <div class="kash-nw-bar" aria-hidden="true">
+    <span style="width: {{ '%.2f' | format(nw.parts[0]) }}%; background:#3b82f6"></span><span style="width: {{ '%.2f' | format(nw.parts[1]) }}%; background:#10b981"></span><span style="width: {{ '%.2f' | format(nw.parts[2]) }}%; background:#f43f5e"></span>
+  </div>
+  <div class="grid grid-cols-3 gap-2 text-xs">
+    <div class="min-w-0"><div class="flex items-center gap-1.5 text-[0.6875rem] text-slate-500"><span class="kash-nw-dot" style="background:#3b82f6"></span>Banking</div><div class="font-bold text-slate-900 truncate">{{ nw.banking | money(0) }}</div></div>
+    <div class="min-w-0"><div class="flex items-center gap-1.5 text-[0.6875rem] text-slate-500"><span class="kash-nw-dot" style="background:#10b981"></span>Investments</div><div class="font-bold text-emerald-600 truncate">{{ nw.investments | money(0) }}</div></div>
+    <div class="min-w-0"><div class="flex items-center gap-1.5 text-[0.6875rem] text-slate-500"><span class="kash-nw-dot" style="background:#f43f5e"></span>Debts</div><div class="font-bold text-rose-500 truncate">{{ (0 - nw.debts) | money(0) }}</div></div>
+  </div>
+</a>
+{%- endmacro %}
+
 {% macro mobile_card(id) -%}
-{% if id == "balance" %}
+{% if id == "net_worth" %}{{ card_net_worth() }}
+{% elif id == "balance" %}
 <a href="/accounts" class="block kash-hero-card relative overflow-hidden rounded-2xl p-5 hover:ring-2 hover:ring-white/20 transition-all cursor-pointer group">
   <div class="flex items-center gap-1.5 text-xs font-medium text-slate-400 group-hover:text-white transition-colors">
     <span>Total Banking Balance{% if not range.is_current %} · {{ balance_as_of | day }}{% endif %}</span>
@@ -526,6 +564,7 @@ openTxModal('{{ tx.id }}', {{ tx.clean_description | tojson | forceescape }}, {{
 {% macro desktop_card(placed) -%}
 {% set cls = spans[placed.span] %}
 {% if placed.id == "stats" %}{{ card_stats(cls) }}
+{% elif placed.id == "net_worth" %}{{ card_net_worth(cls) }}
 {% elif placed.id == "categories" %}{{ card_categories(cls, "donut-d") }}
 {% elif placed.id == "sankey" %}{{ card_sankey(cls, sankey_desktop) }}
 {% elif placed.id == "recent" %}{{ card_recent_desktop(cls) }}

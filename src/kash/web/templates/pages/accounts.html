@@ -14,23 +14,74 @@
 {% if acc.connection_id and amount %}<div class="{{ classes }} text-[0.6875rem] text-slate-400 mt-0.5" title="Your bank's balance leaves out transactions that haven't posted yet; the balance shown includes them"><span class="whitespace-nowrap">{{ posted | money }} posted</span> · <span class="whitespace-nowrap">{{ amount | money }} pending</span></div>{% endif %}
 {%- endmacro %}
 {% block content %}
+{# One account row. Tapping it opens its transactions. ``amount`` is the shown balance,
+   ``posted`` the bank's own (for the pending note), ``net`` this month's surplus or
+   deficit (banking only). Editing, pausing and bank connections are in
+   Settings › Accounts & bank sync. #}
+{% macro account_row(acc, ico, tint, amount, amount_class, posted, net=none) -%}
+<a href="/transactions?account_id={{ acc.id }}" class="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/50 transition-colors" title="Show {{ acc.name }} transactions">
+  <div class="flex items-center gap-3 min-w-0 flex-1">
+    <div class="kash-icon-box rounded-xl {{ tint }}">{{ icon(ico, "w-5 h-5") }}</div>
+    <div class="min-w-0">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="font-bold text-sm text-slate-900 leading-snug">{{ acc.name }}</span>
+        {{ cash_flow_badge(acc) }}
+      </div>
+      <div class="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
+        <span>{% if acc.mask %}••••&nbsp;{{ acc.mask }}{% else %}{{ acc.account_type.replace('_', ' ').capitalize() }}{% endif %}</span>
+        {% if acc.mask %}<span class="hidden sm:inline">•</span><span class="hidden sm:inline capitalize">{{ acc.account_type.replace('_', ' ') }}</span>{% endif %}
+      </div>
+      {{ pending_note(acc, posted, pending.get(acc.id), "sm:hidden") }}
+      {{ balance_date(acc) }}
+    </div>
+  </div>
+  <div class="flex items-center gap-2 flex-shrink-0">
+    <div class="text-right">
+      <div class="font-bold text-sm {{ amount_class }}">{{ amount | money }}</div>
+      {% if net is not none %}
+      {% set up = net >= 0 %}
+      <div class="mt-1"><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.6875rem] font-semibold whitespace-nowrap {{ 'bg-emerald-50 text-emerald-700' if up else 'bg-rose-50 text-rose-700' }}" title="Income minus spending in {{ month_label }} so far (transfers between your accounts left out)">{{ "▲" if up else "▼" }} {{ net | money(sign=True) }} {{ "surplus" if up else "deficit" }}</span></div>
+      {% endif %}
+      {{ pending_note(acc, posted, pending.get(acc.id), "hidden sm:block") }}
+    </div>
+    <span class="text-slate-300">{{ icon("chevron-right", "w-4 h-4") }}</span>
+  </div>
+</a>
+{%- endmacro %}
+{# A group you tap to open. Closed every time you come to the page (see the script). #}
+{% macro collapsible(id, ico, tint, title, count, total, total_class, empty) -%}
+<details id="{{ id }}" data-kash-collapse class="kash-card kash-card-details bg-white border border-slate-100 shadow-sm rounded-2xl overflow-hidden">
+  <summary class="p-3.5 flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-50/50 transition-colors">
+    <span class="flex items-center gap-3 min-w-0">
+      <span class="kash-icon-box rounded-xl {{ tint }}">{{ icon(ico, "w-5 h-5") }}</span>
+      <span class="min-w-0">
+        <span class="flex items-center gap-2"><span class="font-bold text-sm text-slate-900">{{ title }}</span><span class="badge badge-xs bg-slate-100 text-slate-500 border-slate-200 font-semibold text-[0.625rem]">{{ count }}</span></span>
+        <span class="block text-xs text-slate-400 mt-0.5">Tap to show</span>
+      </span>
+    </span>
+    <span class="flex items-center gap-2 flex-shrink-0">
+      <span class="font-bold text-sm {{ total_class }}">{{ total | money }}</span>
+      <span class="text-slate-400">{{ icon("chevron-down", "w-4 h-4 kash-chevron") }}</span>
+    </span>
+  </summary>
+  <div class="border-t border-slate-100 divide-y divide-slate-100">
+    {{ caller() }}
+    {% if not count %}<div class="p-4 text-center text-xs text-slate-400">{{ empty }}</div>{% endif %}
+  </div>
+</details>
+{%- endmacro %}
+
 <div class="space-y-5 max-w-4xl mx-auto pb-6">
 
-  <!-- Mobile Top Bar -->
+  <!-- Top bar: account settings live in Settings -->
   <div class="flex items-center justify-between pt-1 pb-1">
     <div>
       <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">Accounts</h2>
-      <p class="text-xs text-slate-400 mt-0.5">Track your net worth, banking assets, and bank connections</p>
+      <p class="text-xs text-slate-400 mt-0.5">Net worth and bank balances</p>
     </div>
-    <div class="flex items-center gap-2">
-      <button onclick="document.getElementById('add-connection-modal').showModal()" class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5 border border-emerald-200/60">
-        {{ icon("link", "w-3.5 h-3.5") }}
-        <span class="hidden sm:inline">Bank Sync</span>
-      </button>
-      <button onclick="add_account_modal.showModal()" class="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" title="Add Account">
-        {{ icon("plus", "w-4 h-4") }}
-      </button>
-    </div>
+    <a href="/settings?section=accounts" class="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-xs hover:bg-slate-50 transition-colors" title="Accounts &amp; bank sync settings" aria-label="Accounts and bank sync settings">
+      {{ icon("settings", "w-4 h-4") }}
+    </a>
   </div>
 
   <!-- Hero Net Worth & Assets Overview Card -->
@@ -39,8 +90,6 @@
     <div class="text-3xl font-extrabold tracking-tight text-white my-1">
       {{ total_net_worth | money }}
     </div>
-
-    <!-- 3-Column Asset & Liability Breakdown -->
     <div class="grid grid-cols-3 gap-2 pt-3 mt-3 border-t border-white/10 text-xs">
       <div>
         <div class="text-[0.6875rem] text-slate-400 font-medium">Banking & Cash</div>
@@ -57,471 +106,60 @@
     </div>
   </div>
 
-  <!-- Bank connections (SimpleFIN) -->
-  {% for conn in connections %}
-  <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl p-4">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-      <div class="flex items-center gap-3 min-w-0">
-        <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
-          {{ icon("bank", "w-5 h-5") }}
-        </div>
-        <div class="min-w-0">
-          <div class="flex items-center gap-2 flex-wrap">
-            <span class="font-bold text-slate-900 text-sm">{{ conn.institution_name }}</span>
-            {% if conn.status == "active" %}
-            <span class="badge badge-xs bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold">Active</span>
-            {% elif conn.status == "reauth_required" %}
-            <span class="badge badge-xs bg-amber-50 text-amber-700 border-amber-200 font-semibold">Re-auth required</span>
-            {% elif conn.status == "paused" %}
-            <span class="badge badge-xs bg-slate-100 text-slate-600 border-slate-200 font-semibold">Paused</span>
-            {% else %}
-            <span class="badge badge-xs bg-rose-50 text-rose-700 border-rose-200 font-semibold">Error</span>
-            {% endif %}
-            {% if conn.provider_name == 'simplefin' %}
-            <span class="badge badge-xs bg-blue-50 text-blue-700 border-blue-200 font-semibold">SimpleFIN</span>
-            {% endif %}
-          </div>
-          <div class="text-xs text-slate-400 mt-0.5">
-            {% if conn.last_synced_at %}
-              Last synced: {{ (conn.last_synced_at | fulldate) ~ ' ' ~ (conn.last_synced_at | clock) }}
-            {% else %}
-              Never synced
-            {% endif %}
-          </div>
-          {% if conn.last_error_message %}
-          <div class="text-xs text-rose-500 font-medium truncate mt-0.5" title="{{ conn.last_error_message }}">{{ conn.last_error_message }}</div>
-          {% endif %}
-        </div>
-      </div>
+  {% if connections_attention %}
+  <a href="/settings?section=accounts" class="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 transition-colors">
+    <span class="flex items-center gap-2.5 text-xs font-semibold">
+      <span class="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0"></span>
+      A bank connection needs your attention
+    </span>
+    <span class="text-xs font-bold whitespace-nowrap">Settings ›</span>
+  </a>
+  {% endif %}
 
-      <div class="flex items-center gap-2 flex-shrink-0">
-        <form action="/connections/{{ conn.id }}/sync" method="POST" class="inline">
-          <input type="hidden" name="redirect_url" value="/accounts">
-          <button type="submit" class="btn btn-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl border-none font-semibold text-xs px-4">
-            {{ icon("refresh", "w-3.5 h-3.5") }}
-            <span>Sync with Bank</span>
-          </button>
-        </form>
-        <form action="/connections/{{ conn.id }}/delete" method="POST" hx-confirm="Are you sure you want to remove this connection? Existing transactions will be preserved." class="inline">
-          <button type="submit" class="btn btn-sm btn-ghost hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-xl px-2" title="Remove connection" aria-label="Remove connection">
-            {{ icon("trash", "w-4 h-4") }}
-          </button>
-        </form>
-      </div>
-    </div>
-
-    {% if conn.pending_accounts %}
-    <!-- New accounts waiting for an answer: new, or replacing one (e.g. a new card number)? -->
-    <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-3">
-      <div>
-        <div class="text-sm font-bold text-amber-900">New account{{ "s" if conn.pending_accounts | length > 1 }} from your bank</div>
-        <p class="text-xs text-amber-800 mt-0.5">Is it a new account, or does it replace one you have, like a card with a new number? A replaced account keeps its history and continues with the new one. Nothing is imported until you answer.</p>
-      </div>
-      {% for held in conn.pending_accounts %}
-      {% set ext = held.account %}
-      <div class="rounded-xl bg-white border border-amber-100 p-3 space-y-2.5">
-        <div class="flex items-start justify-between gap-3 text-xs">
-          <div class="min-w-0">
-            <div class="font-semibold text-slate-800 truncate" title="{{ ext.name }}">{{ ext.name }}</div>
-            <div class="text-[0.6875rem] text-slate-400">{% if ext.mask %}•••• {{ ext.mask }} · {% endif %}{{ ext.institution_name or "SimpleFIN" }}</div>
-          </div>
-          <span class="font-mono font-bold flex-shrink-0 {{ 'text-rose-600' if ext.current_balance < 0 else 'text-slate-700' }}">{{ ext.current_balance | money }}</span>
-        </div>
-        <form method="POST" action="/connections/{{ conn.id }}/accounts/link" class="flex flex-col sm:flex-row gap-2">
-          <input type="hidden" name="external_id" value="{{ ext.external_id }}">
-          <select name="account_id" aria-label="The account it replaces" class="select select-sm select-bordered w-full sm:flex-1 min-w-0 rounded-xl bg-white text-xs">
-            <optgroup label="Most likely">
-              {% for account_id in held.suggested_ids %}{% set a = accounts_by_id.get(account_id) %}{% if a %}
-              <option value="{{ a.id }}">{{ a.name }}{% if a.mask %} ••{{ a.mask }}{% endif %}</option>
-              {% endif %}{% endfor %}
-            </optgroup>
-            <optgroup label="Other accounts">
-              {% for a in all_accounts if a.id not in held.suggested_ids and a.currency == ext.currency %}
-              <option value="{{ a.id }}">{{ a.name }}{% if a.mask %} ••{{ a.mask }}{% endif %}</option>
-              {% endfor %}
-            </optgroup>
-          </select>
-          <button type="submit" class="btn btn-sm bg-emerald-600 hover:bg-emerald-700 text-white border-none rounded-xl font-semibold text-xs">Replaces this account</button>
-        </form>
-        <form method="POST" action="/connections/{{ conn.id }}/accounts/add">
-          <input type="hidden" name="external_id" value="{{ ext.external_id }}">
-          <button type="submit" class="btn btn-sm w-full sm:w-auto btn-outline border-slate-200 text-slate-700 rounded-xl font-semibold text-xs">It's a new account</button>
-        </form>
-      </div>
-      {% endfor %}
-    </div>
-    {% endif %}
-  </div>
-  {% else %}
-  <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl p-4">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
-          {{ icon("link", "w-5 h-5") }}
-        </div>
-        <div>
-          <div class="font-bold text-slate-900 text-sm">Direct Bank Synchronization</div>
-          <div class="text-xs text-slate-400">Connect through SimpleFIN Bridge to automatically import transactions and balances.</div>
-        </div>
-      </div>
-      <button onclick="document.getElementById('add-connection-modal').showModal()" class="btn btn-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl border-none font-semibold text-xs px-4 self-start sm:self-auto">
-        Connect SimpleFIN
-      </button>
-    </div>
-  </div>
-  {% endfor %}
-
-  <!-- Group 1: Banking & Cash Accounts -->
+  <!-- Cash & Banking: always open -->
   <div class="space-y-2">
     <div class="flex items-center justify-between px-1">
       <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Cash & Banking ({{ banking_accounts | length }})</h3>
       <span class="text-xs font-semibold text-slate-600">{{ total_banking | money }}</span>
     </div>
-
     <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl divide-y divide-slate-100 overflow-hidden">
       {% for acc in banking_accounts %}
-      <div class="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/50 transition-colors {% if not acc.is_active %}opacity-60 bg-slate-50/40{% endif %}">
-        <div class="flex items-center gap-3 min-w-0 flex-1">
-          <div class="kash-icon-box rounded-xl {% if acc.account_type == 'checking' %}bg-blue-100 text-blue-600{% elif acc.account_type == 'savings' %}bg-cyan-100 text-cyan-600{% else %}bg-slate-100 text-slate-600{% endif %}">
-            {{ icon("bank", "w-5 h-5") }}
-          </div>
-          <div class="min-w-0">
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="font-bold text-sm text-slate-900 truncate">{{ acc.name }}</span>
-              {{ cash_flow_badge(acc) }}
-              {% if not acc.is_active %}
-                <span class="badge badge-xs bg-amber-50 text-amber-700 border-amber-200 font-semibold text-[0.625rem]">Sync Paused</span>
-              {% endif %}
-              {% if not acc.show_in_balance %}
-                <span class="badge badge-xs bg-slate-100 text-slate-500 border-slate-200 font-semibold text-[0.625rem]" title="Not in the dashboard's Total Banking Balance; still counted in net worth">Hidden on dashboard</span>
-              {% endif %}
-            </div>
-            <div class="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
-              <span>{% if acc.mask %}••••&nbsp;{{ acc.mask }}{% else %}{{ acc.account_type.capitalize() }}{% endif %}</span>
-              <span class="hidden sm:inline">•</span>
-              <span class="hidden sm:inline capitalize">{{ acc.account_type }}</span>
-            </div>
-            {{ pending_note(acc, acc.current_balance, pending.get(acc.id), "sm:hidden") }}
-            {{ balance_date(acc) }}
-          </div>
-        </div>
-
-        <div class="flex items-center gap-3">
-          <div class="text-right">
-            <div class="font-bold text-sm {% if balances[acc.id] < 0 %}text-rose-500{% else %}text-slate-900{% endif %}">
-              {{ balances[acc.id] | money }}
-            </div>
-            {{ pending_note(acc, acc.current_balance, pending.get(acc.id), "hidden sm:block") }}
-          </div>
-
-          <!-- Account Controls: Toggle Sync & Edit -->
-          <div class="flex items-center gap-1">
-            <form action="/accounts/{{ acc.id }}/toggle-sync" method="POST" class="inline">
-              <button type="submit" class="btn btn-xs {% if acc.is_active %}btn-ghost text-slate-400 hover:text-amber-600{% else %}bg-amber-100 text-amber-800 hover:bg-amber-200 border-none{% endif %} rounded-lg" title="{% if acc.is_active %}Pause bank sync for this account{% else %}Resume bank sync{% endif %}">
-                {% if acc.is_active %}
-                  {{ icon("pause", "w-3 h-3") }}
-                {% else %}
-                  {{ icon("play", "w-3 h-3") }}
-                {% endif %}
-              </button>
-            </form>
-            <button onclick="openEditAccount('{{ acc.id }}', {{ acc.name | tojson | forceescape }}, '{{ acc.account_type.value }}', {{ 'true' if acc.show_in_balance else 'false' }}, '{{ acc.cash_flow.value }}')" class="btn btn-xs btn-ghost text-slate-400 hover:text-slate-700 rounded-lg" title="Edit Account">
-              {{ icon("edit", "w-3 h-3") }}
-            </button>
-          </div>
-        </div>
-      </div>
+      {% set tint = 'bg-blue-100 text-blue-600' if acc.account_type == 'checking' else ('bg-cyan-100 text-cyan-600' if acc.account_type == 'savings' else 'bg-slate-100 text-slate-600') %}
+      {{ account_row(acc, "bank", tint, balances[acc.id], 'text-rose-500' if balances[acc.id] < 0 else 'text-slate-900', acc.current_balance, month_net.get(acc.id)) }}
       {% else %}
-      <div class="p-4 text-center text-xs text-slate-400">No banking accounts added.</div>
+      <div class="p-4 text-center text-xs text-slate-400">No banking accounts yet. <a href="/settings?section=accounts" class="font-semibold text-emerald-600 hover:underline">Add one in Settings</a></div>
       {% endfor %}
     </div>
   </div>
 
-  <!-- Group 2: Investment Accounts -->
-  <div class="space-y-2">
-    <div class="flex items-center justify-between px-1">
-      <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Investments & Portfolios ({{ investment_accounts | length }})</h3>
-      <span class="text-xs font-semibold text-emerald-600">{{ total_investments | money }}</span>
-    </div>
+  <!-- Investments and Liabilities: tap to open -->
+  {% call collapsible("acc-investments", "trending-up", "bg-emerald-100 text-emerald-600", "Investments", investment_accounts | length, total_investments, "text-emerald-600", "No investment accounts linked.") %}
+    {% for acc in investment_accounts %}
+    {{ account_row(acc, "trending-up", "bg-emerald-100 text-emerald-600", balances[acc.id], "text-emerald-600", acc.current_balance) }}
+    {% endfor %}
+  {% endcall %}
 
-    <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl divide-y divide-slate-100 overflow-hidden">
-      {% for acc in investment_accounts %}
-      <div class="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/50 transition-colors {% if not acc.is_active %}opacity-60 bg-slate-50/40{% endif %}">
-        <div class="flex items-center gap-3 min-w-0 flex-1">
-          <div class="kash-icon-box rounded-xl bg-emerald-100 text-emerald-600">
-            {{ icon("trending-up", "w-5 h-5") }}
-          </div>
-          <div class="min-w-0">
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="font-bold text-sm text-slate-900 truncate">{{ acc.name }}</span>
-              {{ cash_flow_badge(acc) }}
-              <span class="badge badge-xs bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold text-[0.625rem]">Investment</span>
-              {% if not acc.is_active %}
-                <span class="badge badge-xs bg-amber-50 text-amber-700 border-amber-200 font-semibold text-[0.625rem]">Sync Paused</span>
-              {% endif %}
-            </div>
-            <div class="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
-              <span>{% if acc.mask %}••••&nbsp;{{ acc.mask }}{% else %}Brokerage / Portfolio{% endif %}</span>
-              <span class="hidden sm:inline">•</span>
-              <span class="hidden sm:inline">{% if acc.cash_flow.value == "income" %}Income only in income &amp; spending{% elif acc.cash_flow.value == "none" %}Not in income &amp; spending{% else %}In income &amp; spending{% endif %}</span>
-            </div>
-            {{ pending_note(acc, acc.current_balance, pending.get(acc.id), "sm:hidden") }}
-            {{ balance_date(acc) }}
-          </div>
-        </div>
+  {% call collapsible("acc-liabilities", "credit-card", "bg-slate-800 text-white", "Liabilities & Credit", liability_accounts | length, 0 - total_liabilities, "text-rose-500", "No liability accounts linked.") %}
+    {% for acc in liability_accounts %}
+    {{ account_row(acc, "credit-card", "bg-slate-800 text-white", 0 - balances[acc.id] | abs, "text-rose-500", 0 - acc.current_balance | abs) }}
+    {% endfor %}
+  {% endcall %}
 
-        <div class="flex items-center gap-3">
-          <div class="text-right">
-            <div class="font-bold text-sm text-emerald-600">
-              {{ balances[acc.id] | money }}
-            </div>
-            {{ pending_note(acc, acc.current_balance, pending.get(acc.id), "hidden sm:block") }}
-          </div>
-
-          <div class="flex items-center gap-1">
-            <form action="/accounts/{{ acc.id }}/toggle-sync" method="POST" class="inline">
-              <button type="submit" class="btn btn-xs {% if acc.is_active %}btn-ghost text-slate-400 hover:text-amber-600{% else %}bg-amber-100 text-amber-800 hover:bg-amber-200 border-none{% endif %} rounded-lg" title="{% if acc.is_active %}Pause bank sync for this account{% else %}Resume bank sync{% endif %}">
-                {% if acc.is_active %}
-                  {{ icon("pause", "w-3 h-3") }}
-                {% else %}
-                  {{ icon("play", "w-3 h-3") }}
-                {% endif %}
-              </button>
-            </form>
-            <button onclick="openEditAccount('{{ acc.id }}', {{ acc.name | tojson | forceescape }}, '{{ acc.account_type.value }}', {{ 'true' if acc.show_in_balance else 'false' }}, '{{ acc.cash_flow.value }}')" class="btn btn-xs btn-ghost text-slate-400 hover:text-slate-700 rounded-lg" title="Edit Account">
-              {{ icon("edit", "w-3 h-3") }}
-            </button>
-          </div>
-        </div>
-      </div>
-      {% else %}
-      <div class="p-4 text-center text-xs text-slate-400">No investment accounts linked.</div>
-      {% endfor %}
-    </div>
-  </div>
-
-  <!-- Group 3: Liabilities & Debt -->
-  <div class="space-y-2">
-    <div class="flex items-center justify-between px-1">
-      <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Liabilities & Credit ({{ liability_accounts | length }})</h3>
-      <span class="text-xs font-semibold text-rose-500">{{ total_liabilities | money }}</span>
-    </div>
-
-    <div class="kash-card bg-white border border-slate-100 shadow-sm rounded-2xl divide-y divide-slate-100 overflow-hidden">
-      {% for acc in liability_accounts %}
-      <div class="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/50 transition-colors {% if not acc.is_active %}opacity-60 bg-slate-50/40{% endif %}">
-        <div class="flex items-center gap-3 min-w-0 flex-1">
-          <div class="kash-icon-box rounded-xl bg-slate-800 text-white">
-            {{ icon("credit-card", "w-5 h-5") }}
-          </div>
-          <div class="min-w-0">
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="font-bold text-sm text-slate-900 truncate">{{ acc.name }}</span>
-              {{ cash_flow_badge(acc) }}
-              {% if not acc.is_active %}
-                <span class="badge badge-xs bg-amber-50 text-amber-700 border-amber-200 font-semibold text-[0.625rem]">Sync Paused</span>
-              {% endif %}
-            </div>
-            <div class="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
-              <span>{% if acc.mask %}••••&nbsp;{{ acc.mask }}{% else %}{{ acc.account_type.replace('_', ' ').capitalize() }}{% endif %}</span>
-              <span class="hidden sm:inline">•</span>
-              <span class="hidden sm:inline capitalize">{{ acc.account_type.replace('_', ' ') }}</span>
-            </div>
-            {{ pending_note(acc, 0 - acc.current_balance | abs, pending.get(acc.id), "sm:hidden") }}
-            {{ balance_date(acc) }}
-          </div>
-        </div>
-
-        <div class="flex items-center gap-3">
-          <div class="text-right">
-            <div class="font-bold text-sm text-rose-500">
-              {{ (0 - balances[acc.id] | abs) | money }}
-            </div>
-            {{ pending_note(acc, 0 - acc.current_balance | abs, pending.get(acc.id), "hidden sm:block") }}
-          </div>
-
-          <div class="flex items-center gap-1">
-            <form action="/accounts/{{ acc.id }}/toggle-sync" method="POST" class="inline">
-              <button type="submit" class="btn btn-xs {% if acc.is_active %}btn-ghost text-slate-400 hover:text-amber-600{% else %}bg-amber-100 text-amber-800 hover:bg-amber-200 border-none{% endif %} rounded-lg" title="{% if acc.is_active %}Pause bank sync for this account{% else %}Resume bank sync{% endif %}">
-                {% if acc.is_active %}
-                  {{ icon("pause", "w-3 h-3") }}
-                {% else %}
-                  {{ icon("play", "w-3 h-3") }}
-                {% endif %}
-              </button>
-            </form>
-            <button onclick="openEditAccount('{{ acc.id }}', {{ acc.name | tojson | forceescape }}, '{{ acc.account_type.value }}', {{ 'true' if acc.show_in_balance else 'false' }}, '{{ acc.cash_flow.value }}')" class="btn btn-xs btn-ghost text-slate-400 hover:text-slate-700 rounded-lg" title="Edit Account">
-              {{ icon("edit", "w-3 h-3") }}
-            </button>
-          </div>
-        </div>
-      </div>
-      {% else %}
-      <div class="p-4 text-center text-xs text-slate-400">No liability accounts linked.</div>
-      {% endfor %}
-    </div>
-  </div>
-
-  <!-- Security & Architecture Information Card -->
-  <div class="kash-card bg-slate-50/60 border border-slate-200/80 rounded-2xl p-5 space-y-3">
-    <div class="flex items-center gap-2.5 text-slate-800 font-bold text-sm">
-      <div class="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
-        {{ icon("shield", "w-3.5 h-3.5") }}
-      </div>
-      <span>Bank-Grade Encryption & Privacy Architecture</span>
-    </div>
-    <p class="text-xs text-slate-500 leading-relaxed">
-      All bank access tokens and credentials are encrypted at rest using authenticated <strong>AES-256-GCM</strong>. Your financial credentials never leave your self-hosted server. SimpleFIN Bridge queries are strictly rate-limited to 24 requests/day to prevent API throttling.
-    </p>
-  </div>
+  {% if paused_count %}
+  <p class="text-center text-xs text-slate-400">{{ paused_count }} paused account{{ "s" if paused_count != 1 }} not shown · <a href="/settings?section=accounts" class="font-semibold text-emerald-600 hover:underline">Manage</a></p>
+  {% endif %}
 
 </div>
 
-<!-- Connect Bank / SimpleFIN Modal -->
-<dialog id="add-connection-modal" class="modal">
-  <div class="modal-box rounded-2xl bg-white border border-slate-200 max-w-lg">
-    <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-      <div class="flex items-center gap-2.5">
-        <div class="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-          {{ icon("bank", "w-4 h-4") }}
-        </div>
-        <h3 class="font-extrabold text-base text-slate-900">Link Bank Account</h3>
-      </div>
-      <button type="button" onclick="document.getElementById('add-connection-modal').close()" class="btn btn-xs btn-ghost btn-circle text-slate-400">✕</button>
-    </div>
-
-    <!-- SimpleFIN Bridge Connection Form -->
-    <div id="tab-simplefin" class="space-y-4">
-      <form action="/connections/create" method="POST" class="space-y-4">
-        <input type="hidden" name="provider_type" value="simplefin">
-        <input type="hidden" name="redirect_url" value="/accounts">
-
-        <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-            SimpleFIN Setup Token
-          </label>
-          <textarea 
-            name="token" 
-            rows="3" 
-            required 
-            placeholder="Paste your base64-encoded SimpleFIN Setup Token..."
-            class="textarea textarea-bordered w-full rounded-2xl text-xs font-mono bg-slate-50 border-slate-200 focus:bg-white focus:border-emerald-500"
-          ></textarea>
-          <p class="text-[0.6875rem] text-slate-400 mt-1.5">
-            Obtain a token from your <a href="https://bridge.simplefin.org" target="_blank" class="text-emerald-600 underline font-medium">SimpleFIN Bridge</a> account. Kash will claim the Access URL and store it with AES-256-GCM encryption.
-          </p>
-        </div>
-
-        <div class="modal-action mt-6">
-          <button type="button" onclick="document.getElementById('add-connection-modal').close()" class="btn btn-sm btn-ghost rounded-xl text-slate-600">Cancel</button>
-          <button type="submit" class="btn btn-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl border-none font-semibold px-5">
-            Claim & Connect
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-</dialog>
-
-<!-- Add Manual Account Modal -->
-<dialog id="add_account_modal" class="modal">
-  <div class="modal-box rounded-2xl bg-white border border-slate-200">
-    <h3 class="font-bold text-lg text-slate-900 mb-4">Add Manual Account</h3>
-    <form method="POST" action="/accounts/new" class="space-y-4">
-      <div>
-        <label class="block text-xs font-semibold text-slate-700 mb-1">Account Name</label>
-        <input type="text" name="name" placeholder="e.g. Primary Checking" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500" required />
-      </div>
-      <div>
-        <label class="block text-xs font-semibold text-slate-700 mb-1">Account Type</label>
-        <select name="account_type" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
-          <option value="checking">Checking</option>
-          <option value="savings">Savings</option>
-          <option value="credit_card">Credit Card</option>
-          <option value="cash">Cash / Petty Cash</option>
-          <option value="investment">Investment / Brokerage</option>
-          <option value="loan">Loan</option>
-        </select>
-      </div>
-      <div>
-        <label class="block text-xs font-semibold text-slate-700 mb-1">Starting Balance</label>
-        <input type="number" step="0.01" name="starting_balance" placeholder="0.00" value="0.00" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500" required />
-      </div>
-      <div class="flex items-center justify-end gap-2 pt-2">
-        <button type="button" onclick="add_account_modal.close()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
-        <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors">Save Account</button>
-      </div>
-    </form>
-  </div>
-</dialog>
-
-<!-- Edit Account Modal -->
-<dialog id="edit_account_modal" class="modal">
-  <div class="modal-box rounded-2xl bg-white border border-slate-200">
-    <h3 class="font-bold text-lg text-slate-900 mb-4">Edit Account</h3>
-    <form id="edit-account-form" method="POST" action="" class="space-y-4">
-      <div>
-        <label class="block text-xs font-semibold text-slate-700 mb-1">Account Name</label>
-        <input id="edit-acc-name" type="text" name="name" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500" required />
-      </div>
-      <div>
-        <label class="block text-xs font-semibold text-slate-700 mb-1">Account Classification</label>
-        <select id="edit-acc-type" name="account_type" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
-          <option value="checking">Checking</option>
-          <option value="savings">Savings</option>
-          <option value="credit_card">Credit Card</option>
-          <option value="cash">Cash / Petty Cash</option>
-          <option value="investment">Investment / Brokerage</option>
-          <option value="loan">Loan</option>
-        </select>
-      </div>
-      <input type="hidden" name="balance_option" value="1" />
-      <label id="edit-acc-balance-row" class="flex items-start gap-2 cursor-pointer">
-        <input id="edit-acc-balance" type="checkbox" name="show_in_balance" value="1" class="checkbox checkbox-sm checkbox-success mt-0.5" />
-        <span class="text-sm text-slate-700">
-          <span class="font-semibold">Show in the dashboard's Total Banking Balance</span>
-          <span class="block text-[0.6875rem] text-slate-400">Untick for money you don't want to see there (e.g. a savings goal). It still counts in your net worth and on this page.</span>
-        </span>
-      </label>
-      <div>
-        <label class="block text-xs font-semibold text-slate-700 mb-1" for="edit-acc-cash-flow">Income &amp; spending</label>
-        <select id="edit-acc-cash-flow" name="cash_flow" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
-          <option value="all">Count everything</option>
-          <option value="income">Count income only</option>
-          <option value="none">Don't count</option>
-        </select>
-        <p class="text-[0.6875rem] text-slate-400 mt-1">
-          What this account adds to income, spending, budgets and reports. <strong>Count everything</strong>: every transaction, as your rules and categories decide.
-          <strong>Count income only</strong>: only money in that has an Income category (e.g. dividends your rules file under one); buys, sells and transfers never count.
-          <strong>Don't count</strong>: only its balance (net worth). Balances aren't affected.
-        </p>
-      </div>
-      <div class="flex items-center justify-end gap-2 pt-2">
-        <button type="button" onclick="edit_account_modal.close()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
-        <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors">Save Changes</button>
-      </div>
-    </form>
-  </div>
-</dialog>
-
 <script>
-// Runs again whenever the page is swapped in (hx-boost), so top-level names use var.
-var BANKING_TYPES = ['checking', 'savings', 'cash'];
-function syncBalanceOption() {
-  // Only checking, savings and cash make up the dashboard's banking balance.
-  const banking = BANKING_TYPES.includes(document.getElementById('edit-acc-type').value);
-  document.getElementById('edit-acc-balance-row').classList.toggle('hidden', !banking);
-}
-document.getElementById('edit-acc-type').addEventListener('change', syncBalanceOption);
-function openEditAccount(id, name, type, showInBalance, cashFlow) {
-  const form = document.getElementById('edit-account-form');
-  form.action = `/accounts/${id}/update`;
-  document.getElementById('edit-acc-name').value = name;
-  document.getElementById('edit-acc-type').value = type;
-  document.getElementById('edit-acc-balance').checked = showInBalance !== false;
-  document.getElementById('edit-acc-cash-flow').value = cashFlow || 'all';
-  syncBalanceOption();
-  document.getElementById('edit_account_modal').showModal();
+// Investments and Liabilities start closed every time you come to Accounts. Close them
+// before htmx saves the page for Back, and when the browser restores it from its cache.
+document.querySelectorAll("details[data-kash-collapse]").forEach(d => { d.open = false; });
+if (!window.kashCollapseBound) {
+  window.kashCollapseBound = true;
+  const closeAll = () => document.querySelectorAll("details[data-kash-collapse]").forEach(d => { d.open = false; });
+  document.addEventListener("htmx:beforeHistorySave", closeAll);
+  window.addEventListener("pageshow", closeAll);
 }
 </script>
 {% endblock %}

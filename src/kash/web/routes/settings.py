@@ -87,6 +87,10 @@ async def settings_page(request: Request, provider: Provider) -> HTMLResponse:
     saved = await provider.settings.get_settings(OWNER_USER_ID)
     schedule = scheduler.effective_schedule(saved, get_settings())
     connections = await provider.bank_connections.list_connections(OWNER_USER_ID)
+    all_accounts = sorted(
+        await provider.accounts.list_accounts(OWNER_USER_ID, include_inactive=True),
+        key=lambda a: a.name.lower(),
+    )
     timezones = list(COMMON_TIMEZONES)
     if schedule.timezone not in timezones:
         timezones.insert(0, schedule.timezone)
@@ -113,6 +117,9 @@ async def settings_page(request: Request, provider: Provider) -> HTMLResponse:
                 request.query_params.get("cron_draft") or schedule.cron_text, schedule.timezone
             ),
             "connections": connections,
+            # Accounts & bank sync: every account, paused ones too (A–Z)
+            "all_accounts": all_accounts,
+            "accounts_by_id": {a.id: a for a in all_accounts},
             **ai_settings_context(saved),
             **await push_settings_context(request, provider),
             **await people_context(request, provider),

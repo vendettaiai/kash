@@ -554,3 +554,9 @@ body:has(.group-content):not(:has(.group-content:not(.hidden))) .kash-expand-all
   .kash-settings-section .toggle-sm { --handleoffset: 1.5rem; height: 1.5rem; width: 3rem; }
   .kash-settings-section .checkbox-sm { height: 1.25rem; width: 1.25rem; }
 }
+
+/* Net worth card (dashboard): banking / investments / debts split */
+.kash-nw-bar { display: flex; height: 0.5rem; border-radius: 9999px; overflow: hidden; background: #f1f5f9; margin: 0.75rem 0 0.625rem; }
+.kash-nw-bar > span { display: block; height: 100%; }
+.kash-nw-dot { width: 0.5rem; height: 0.5rem; border-radius: 9999px; display: inline-block; flex-shrink: 0; }
+[data-theme="dark"] .kash-nw-bar { background: #334155; }

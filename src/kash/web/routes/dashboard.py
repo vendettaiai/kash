@@ -8,7 +8,14 @@ from uuid import UUID
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from kash.domain.models import AccountCashFlow, AccountType, Category, Transaction
+from kash.domain.models import (
+    Account,
+    AccountCashFlow,
+    AccountType,
+    BalanceSnapshot,
+    Category,
+    Transaction,
+)
 from kash.services import dashboard_layout, sankey
 from kash.services.ai.categorize import guesses_for
 from kash.services.bills.service import refresh_bills
@@ -87,6 +94,61 @@ def donut_slices(spending: list[dict[str, Any]], total: Decimal) -> list[dict[st
         )
         offset -= length
     return slices
+
+
+LIABILITY_TYPES = (AccountType.CREDIT_CARD, AccountType.LOAN)
+
+
+def net_worth(
+    accounts: list[Account],
+    txs: list[Transaction],
+    snapshots: list[BalanceSnapshot],
+    days: list[date],
+    today: date,
+    pending: dict[UUID, Decimal],
+) -> dict[str, Any]:
+    """The Net worth card: assets minus debts on the last of ``days``, its change
+    since the first, a trend line, and the banking / investments / debts split.
+    Counted like the Accounts page: every active account (also ones hidden from the
+    banking balance), debts by their size whatever sign the bank reports."""
+    active = [a for a in accounts if a.is_active]
+
+    def series(group: list[Account], absolute: bool = False) -> list[Decimal]:
+        if not absolute:
+            return [v for _, v in balance_series(group, txs, snapshots, days, today, pending)]
+        totals = [Decimal("0")] * len(days)
+        for account in group:  # each debt on its own, so signs can't cancel out
+            for i, (_, v) in enumerate(
+                balance_series([account], txs, snapshots, days, today, pending)
+            ):
+                totals[i] += abs(v)
+        return totals
+
+    banking = series([a for a in active if a.account_type in BANKING_TYPES])
+    invested = series([a for a in active if a.account_type == AccountType.INVESTMENT])
+    debts = series([a for a in active if a.account_type in LIABILITY_TYPES], absolute=True)
+    trend = [(d, banking[i] + invested[i] - debts[i]) for i, d in enumerate(days)]
+    if not trend:
+        return {"total": Decimal("0"), "change": None, "change_pct": None, "chart": None,
+                "banking": Decimal("0"), "investments": Decimal("0"), "debts": Decimal("0"),
+                "parts": []}  # fmt: skip
+    start, end = trend[0][1], trend[-1][1]
+    change = end - start if len(trend) > 1 else None
+    parts_total = max(banking[-1], Decimal("0")) + max(invested[-1], Decimal("0")) + debts[-1]
+    return {
+        "total": end,
+        "change": change,
+        "change_pct": change / abs(start) * 100 if change is not None and start else None,
+        "chart": line_chart(trend),
+        "banking": banking[-1],
+        "investments": invested[-1],
+        "debts": debts[-1],
+        # widths of the banking / investments / debts bar, in %
+        "parts": [
+            float(max(v, Decimal("0")) / parts_total * 100) if parts_total else 0.0
+            for v in (banking[-1], invested[-1], debts[-1])
+        ],
+    }
 
 
 SANKEY_MAX_TARGETS = 7  # spending categories shown; the rest are "Other"
@@ -251,18 +313,23 @@ async def dashboard(
     today = date.today()
     baseline = rng.month.start - timedelta(days=1)
     last_day = min(rng.month.end, today)
+    month_txs = [t for t in history if t.date > baseline]
+    snapshots = await provider.accounts.list_balance_snapshots(user_id)
+    days = [baseline + timedelta(days=i) for i in range((last_day - baseline).days + 1)]
+    pending = await provider.transactions.pending_totals(user_id)
     trend = balance_series(
         [
             a
             for a in accounts
             if a.is_active and a.account_type in BANKING_TYPES and a.show_in_balance
         ],
-        [t for t in history if t.date > baseline],
-        await provider.accounts.list_balance_snapshots(user_id),
-        [baseline + timedelta(days=i) for i in range((last_day - baseline).days + 1)],
+        month_txs,
+        snapshots,
+        days,
         today,
-        await provider.transactions.pending_totals(user_id),
+        pending,
     )
+    worth = net_worth(accounts, month_txs, snapshots, days, today, pending)
     balance_change = trend[-1][1] - trend[0][1] if len(trend) > 1 else None
     start_balance = trend[0][1] if trend else Decimal("0")
     balance_change_pct = (
@@ -288,6 +355,7 @@ async def dashboard(
             "balance_change": balance_change,
             "balance_change_pct": balance_change_pct,
             "balance_chart": line_chart(trend),
+            "net_worth": worth,
             "range": rng,
             "month": rng.month,
             "available_periods": periods,

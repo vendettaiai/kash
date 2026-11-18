@@ -37,6 +37,10 @@ CATALOG: tuple[Card, ...] = (
     Card("net_flow", "Surplus or deficit", "What's left this month", "trending-up", ("mobile",)),
     Card("stats", "Summary", "Balance, income, expenses and surplus", "wallet", ("desktop",)),
     Card(
+        "net_worth", "Net worth", "Assets minus debts, change this month", "landmark",
+        ("mobile", "desktop"), span=5,
+    ),
+    Card(
         "categories", "Spending by category", "Where the money went", "pie-chart",
         ("mobile", "desktop"), span=5,
     ),

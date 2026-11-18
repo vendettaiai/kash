@@ -21,6 +21,7 @@
 {# The sections, in page order. The menus show Account as a profile card, then the groups. #}
 {% set sections = {
   "account": ("user", "bg-teal-50 text-teal-600", "Account"),
+  "accounts": ("bank", "bg-blue-50 text-blue-600", "Accounts & bank sync"),
   "display": ("palette", "bg-amber-50 text-amber-600", "Appearance"),
   "sync": ("refresh-cw", "bg-blue-50 text-blue-600", "Bank sync"),
   "notifications": ("bell", "bg-rose-50 text-rose-600", "Notifications"),
@@ -29,6 +30,7 @@
   "data": ("database", "bg-slate-100 text-slate-600", "Data & backup"),
 } %}
 {% set groups = [
+  ("Money", ["accounts"]),
   ("Preferences", ["display", "sync", "notifications"]),
   ("Automation", ["ai"]),
   ("Household", ["people", "data"]),
@@ -51,7 +53,10 @@ kash-settings-section{% if open_section != id %} max-lg:hidden{% endif %}
 {% else %}{% set sync_summary = "On" %}{% endif %}
 {% set banks = connections | length %}
 {% if banks and not sync_warn %}{% set sync_summary = sync_summary ~ " · " ~ banks ~ (" bank" if banks == 1 else " banks") %}{% endif %}
+{% set needs_answer = connections | selectattr("pending_accounts") | list | length %}
+{% set accounts_warn = needs_answer or (connections | selectattr("status", "in", ["reauth_required", "error"]) | list) %}
 {% set summaries = {
+  "accounts": ("New account from your bank: needs an answer" if needs_answer else ("A bank connection needs attention" if accounts_warn else ((all_accounts | length) ~ (" account" if all_accounts | length == 1 else " accounts") ~ (" · " ~ banks ~ (" bank" if banks == 1 else " banks") if banks else "")))),
   "display": {"light": "Light mode", "dark": "Dark mode", "system": "System theme"}.get(my_theme, "Light mode") ~ " · " ~ current.currency,
   "sync": sync_summary,
   "notifications": ("On · " ~ push_devices ~ (" device" if push_devices == 1 else " devices")) if push_devices else "Off",
@@ -84,7 +89,7 @@ kash-settings-section{% if open_section != id %} max-lg:hidden{% endif %}
       {{ tile(ico, tint, big=not desktop) }}
       <div class="min-w-0 flex-1">
         <div class="font-bold {{ 'text-sm' if desktop else 'text-base' }} leading-snug">{{ title }}</div>
-        <div class="text-xs truncate {{ 'text-amber-600' if id == 'sync' and sync_warn else 'text-base-content/50' }}">{{ summaries[id] }}</div>
+        <div class="text-xs truncate {{ 'text-amber-600' if (id == 'sync' and sync_warn) or (id == 'accounts' and accounts_warn) else 'text-base-content/50' }}">{{ summaries[id] }}</div>
       </div>
       {% if not desktop %}<span class="text-base-content/40">{{ icon("chevron-right", "w-4 h-4") }}</span>{% endif %}
     </a>
@@ -168,6 +173,8 @@ kash-settings-section{% if open_section != id %} max-lg:hidden{% endif %}
         </div>
       </form>
     </div>
+
+    {% include "components/settings_accounts.html" %}
 
     <!-- Appearance: currency, format, theme, text size -->
     <form id="display" method="post" action="/settings" class="{{ shown('display') }} scroll-mt-4 md:scroll-mt-24 kash-card bg-base-100 border border-base-300 shadow-sm rounded-2xl p-5 md:p-6 space-y-4">
@@ -273,7 +280,7 @@ kash-settings-section{% if open_section != id %} max-lg:hidden{% endif %}
         {% endfor %}
       </div>
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <a href="/accounts" class="text-xs font-semibold text-emerald-600 hover:underline">{% if connections %}Manage bank connections on Accounts ›{% else %}Connect a bank on Accounts ›{% endif %}</a>
+        <a href="/settings?section=accounts" class="text-xs font-semibold text-emerald-600 hover:underline">{% if connections %}Manage bank connections ›{% else %}Connect a bank ›{% endif %}</a>
         <button type="submit" class="max-lg:w-full max-lg:py-3 max-lg:text-base px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors">Save</button>
       </div>
     </form>

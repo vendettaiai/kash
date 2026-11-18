@@ -1,4 +1,4 @@
-"""Bank connections (SimpleFIN) and sync, managed on the Accounts page."""
+"""Bank connections (SimpleFIN) and sync, managed in Settings › Accounts & bank sync."""
 
 import logging
 from typing import Annotated
@@ -26,12 +26,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 DEFAULT_PROVIDER = "simplefin"
-ACCOUNTS_PAGE = "/accounts"  # where connections are managed
+ACCOUNTS_PAGE = "/settings?section=accounts"  # where connections are managed
 
 
 @router.get("/connections")
 async def connections_page() -> RedirectResponse:
-    """Bank connections are managed on Accounts; old links and bookmarks land there."""
+    """Bank connections are managed in Settings; old links and bookmarks land there."""
     return redirect_to(ACCOUNTS_PAGE)
 
 

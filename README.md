@@ -2,6 +2,12 @@
 
 **Kash** is a self-hosted personal finance and budgeting app built with Python, FastAPI, Jinja2, HTMX, Tailwind CSS, DaisyUI, and SQLite or PostgreSQL. It has a mobile-first layout with a responsive desktop view.
 
+## Changes in this fork
+- **Accounts page** shows only net worth and balances. Each bank account shows this month's surplus or deficit, and tapping any account opens its transactions. Investments and Liabilities & Credit are collapsed until tapped and close again whenever you leave the page.
+- **Settings › Accounts & bank sync** (new) holds SimpleFIN connections, Sync with Bank, adding accounts, editing accounts and pausing sync, which used to be on the Accounts page.
+- **Dashboard › Customize** has a new **Net worth** card (phone and computer): assets minus debts, its change this month with a trend line, and the banking / investments / debts split.
+- **Docker**: `Dockerfile` and a GitHub Actions workflow that publishes `ghcr.io/<owner>/kash:latest` on every push to `main`.
+
 ## Features
 - **Dashboard**: Balances, net worth, month-to-date income and expenses (compared with the same point last month), budget progress, upcoming bills, and recent transactions.
 - **Accounts**: Checking, savings, credit cards, cash, investments, and loans. Bank-linked accounts take their balance from the bank; manual accounts keep a running balance.

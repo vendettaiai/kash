@@ -441,7 +441,7 @@ RULES = (
         lambda p: p.sync,
         "Bank sync problem",
         "{count} bank sync problems",
-        "/accounts",
+        "/settings?section=accounts",
         daily=False,
         ttl=TTL_SYNC,
     ),
