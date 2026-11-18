@@ -179,8 +179,9 @@ openTxModal('{{ tx.id }}', {{ tx.clean_description | tojson | forceescape }}, {{
       <div class="flex items-center gap-3">
         {{ merchant_box(transaction_icon(tx), "receipt" if tx.amount < 0 else "bank", box="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", fallback_class="bg-slate-100 text-slate-700" if tx.amount < 0 else "bg-emerald-100 text-emerald-600", icon_class="w-4 h-4") }}
         <div>
-          <div class="font-bold text-xs text-slate-900">{{ tx.clean_description }}</div>
-          <div class="text-[0.625rem] text-slate-400">{{ tx.merchant_name or tx.date | fulldate }}</div>
+          {% set blank = tx.clean_description == no_description %}
+          <div class="font-bold text-xs text-slate-900">{{ account_names.get(tx.account_id, "Bank transaction") if blank else tx.clean_description }}</div>
+          <div class="text-[0.625rem] text-slate-400">{% if blank %}No details from bank{% else %}{{ tx.merchant_name or tx.date | fulldate }}{% endif %}</div>
         </div>
       </div>
       <div class="text-right">
@@ -495,8 +496,9 @@ openTxModal('{{ tx.id }}', {{ tx.clean_description | tojson | forceescape }}, {{
       <div class="flex items-center gap-3 min-w-0">
         {{ merchant_box(transaction_icon(tx), "receipt" if tx.amount < 0 else "bank", box="calm-icon", fallback_class="", icon_class="w-4 h-4") }}
         <div class="min-w-0">
-          <div class="calm-name truncate">{{ tx.clean_description }}</div>
-          <div class="calm-meta">{{ tx.date | day }}{% if tx.is_pending %} · pending{% endif %}</div>
+          {% set blank = tx.clean_description == no_description %}
+          <div class="calm-name truncate">{{ account_names.get(tx.account_id, "Bank transaction") if blank else tx.clean_description }}</div>
+          <div class="calm-meta">{{ tx.date | day }}{% if tx.is_pending %} · pending{% endif %}{% if blank %} · no details from bank{% endif %}</div>
         </div>
       </div>
       <div class="calm-amount">{{ tx.amount | money(sign=True) }}</div>

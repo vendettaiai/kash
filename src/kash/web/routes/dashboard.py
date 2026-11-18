@@ -9,6 +9,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from kash.domain.models import (
+    NO_DESCRIPTION,
     Account,
     AccountCashFlow,
     AccountType,
@@ -347,6 +348,8 @@ async def dashboard(
             "summary": summary,
             "income_lines": income_lines,
             "recent_transactions": recent_txs,
+            # Rows the bank sent without text are shown by their account's name
+            "no_description": NO_DESCRIPTION,
             "upcoming_bills": upcoming_bills,
             "upcoming_days": UPCOMING_DAYS,
             # Today's balance, or the month-end balance when looking at a past month
