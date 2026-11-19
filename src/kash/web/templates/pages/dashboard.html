@@ -454,9 +454,9 @@ openTxModal('{{ tx.id }}', {{ tx.clean_description | tojson | forceescape }}, {{
   <div class="calm-row" style="flex-wrap: wrap; row-gap: 0.25rem">
     {{ calm_month_select() }}
     <a href="/transactions?{{ range_query }}" class="text-sm whitespace-nowrap" style="margin-left: auto" title="Money in and out {{ period_phrase }}">
-      <span class="calm-muted">In</span> <b>{{ summary.monthly_income | money(0) }}</b>
-      <span class="calm-faint">·</span> <span class="calm-muted">Out</span> <b>{{ summary.monthly_expenses | money(0) }}</b>
-      <span class="calm-faint">·</span> <b class="{{ 'calm-neg' if left < 0 }}">{{ left | money(0, sign=True) }}</b>
+      <span class="calm-muted">In</span> <b class="mn-in">{{ summary.monthly_income | money(0) }}</b>
+      <span class="calm-faint">·</span> <span class="calm-muted">Out</span> <b class="mn-out">{{ summary.monthly_expenses | money(0) }}</b>
+      <span class="calm-faint">·</span> <b class="{{ 'mn-out' if left < 0 else 'mn-left' }}">{{ left | money(0, sign=True) }}</b>
     </a>
   </div>
   {{ calm_needs_category() }}
@@ -465,12 +465,12 @@ openTxModal('{{ tx.id }}', {{ tx.clean_description | tojson | forceescape }}, {{
 <div class="grid grid-cols-2 calm-band" style="padding:0">
   <a href="/transactions?type=income&{{ range_query }}" class="block py-3 px-3.5">
     <div class="calm-label">Money in</div>
-    <div class="calm-mid mt-0.5">{{ summary.monthly_income | money }}</div>
+    <div class="calm-mid mt-0.5 mn-in">{{ summary.monthly_income | money }}</div>
     {{ deposits_nudge() }}
   </a>
   <a href="/transactions?type=expense&{{ range_query }}" class="block py-3 px-3.5" style="border-left: 1px solid var(--calm-line)">
     <div class="calm-label">Money out</div>
-    <div class="calm-mid mt-0.5">{{ summary.monthly_expenses | money }}</div>
+    <div class="calm-mid mt-0.5 mn-out">{{ summary.monthly_expenses | money }}</div>
     {% if summary.monthly_refunds > 0 %}<div class="calm-meta">after {{ summary.monthly_refunds | money(0) }} refunds</div>{% endif %}
   </a>
 </div>

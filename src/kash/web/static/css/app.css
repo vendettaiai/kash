@@ -750,3 +750,10 @@ details.calm-fold.calm-band > .calm-list { margin: 0 -0.875rem; padding: 0 0.875
 .mn-ring-c { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 1.25rem; }
 .mn-ring-c .calm-label { max-width: 7rem; line-height: 1.3; margin-top: 0.125rem; }
 [data-theme="dark"] body, [data-theme="dark"] body.bg-slate-50 { background-color: #000000; }
+
+/* Money in / out / left, the same colors as the desktop Income, Expenses and Surplus cards */
+:root { --mn-in: #059669; --mn-out: #e11d48; --mn-left: #2563eb; }
+[data-theme="dark"] { --mn-in: #34d399; --mn-out: #fb7185; --mn-left: #60a5fa; }
+.calm .mn-in { color: var(--mn-in); }
+.calm .mn-out { color: var(--mn-out); }
+.calm .mn-left { color: var(--mn-left); }
