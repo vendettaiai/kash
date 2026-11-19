@@ -450,9 +450,10 @@ openTxModal('{{ tx.id }}', {{ tx.clean_description | tojson | forceescape }}, {{
 {% elif id == "net_flow" %}
 {% set left = summary.monthly_surplus %}
 <div class="calm-list calm-band">
-  <div class="calm-row">
+  {# Wraps onto a second line, right-aligned, when the amounts are too long to fit #}
+  <div class="calm-row" style="flex-wrap: wrap; row-gap: 0.25rem">
     {{ calm_month_select() }}
-    <a href="/transactions?{{ range_query }}" class="text-sm whitespace-nowrap" title="Money in and out {{ period_phrase }}">
+    <a href="/transactions?{{ range_query }}" class="text-sm whitespace-nowrap" style="margin-left: auto" title="Money in and out {{ period_phrase }}">
       <span class="calm-muted">In</span> <b>{{ summary.monthly_income | money(0) }}</b>
       <span class="calm-faint">·</span> <span class="calm-muted">Out</span> <b>{{ summary.monthly_expenses | money(0) }}</b>
       <span class="calm-faint">·</span> <b class="{{ 'calm-neg' if left < 0 }}">{{ left | money(0, sign=True) }}</b>
